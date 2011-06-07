@@ -101,7 +101,11 @@ class XcTransform
 
   XcVector operator*(const XcVector & vec) const
   {
-    return this->rot * (vec + this->trans);
+    XcVector ret;
+    ret[0] = this->rot[0][0]*vec[0] + this->rot[0][1]*vec[1] + this->rot[0][2]*vec[2] + trans[0];
+    ret[1] = this->rot[1][0]*vec[0] + this->rot[1][1]*vec[1] + this->rot[1][2]*vec[2] + trans[1];
+    ret[2] = this->rot[2][0]*vec[0] + this->rot[2][1]*vec[1] + this->rot[2][2]*vec[2] + trans[2];
+    return ret;
   }
 
  private:

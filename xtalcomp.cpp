@@ -15,6 +15,8 @@
 
 #include "xtalcomp.h"
 
+#include "stablecomparison.h"
+
 #include <algorithm>
 #include <assert.h>
 #include <limits.h>
@@ -24,8 +26,8 @@
 #define RAD_TO_DEG 57.2957795131
 #define DEG_TO_RAD 0.0174532925199
 
-//#define XTALCOMP_DEBUG 1
 #undef XTALCOMP_DEBUG
+//#define XTALCOMP_DEBUG 1
 
 #ifdef XTALCOMP_DEBUG
 
@@ -141,9 +143,17 @@ public:
   const XcMatrix & cmat() const {return m_cmat;}
   const XcMatrix & fmat() const {return m_fmat;}
 
+  double volume() const {return fabs(m_cmat.determinant());}
+
   XcVector v1() const {return m_cmat.col(0);}
   XcVector v2() const {return m_cmat.col(1);}
   XcVector v3() const {return m_cmat.col(2);}
+
+  // Defined at end of file:
+  // Niggli reduce, rotate to std orientation, wrap atoms to cell:
+  bool canonicalizeLattice();
+  bool isNiggliReduced() const;
+  XcMatrix getCellMatrixInStandardOrientation() const;
 
   void frac2Cart(const XcVector &fcoord, XcVector *ccoord) const
   {
@@ -216,10 +226,9 @@ bool XtalComp::compare(const XcMatrix &cellMatrix1,
   ReducedXtal x1 (cellMatrix1, types1, positions1);
   ReducedXtal x2 (cellMatrix2, types2, positions2);
 
-  // Niggli reduce cells if needed
-  // TODO: Implement niggli algorithm
-  // if (!x1.isNiggliReduced()) x1.niggliReduce();
-  // if (!x2.isNiggliReduced()) x2.niggliReduce();
+  // Standardize the lattices
+  x1.canonicalizeLattice();
+  x2.canonicalizeLattice();
 
   // Check params here. Do not just compare the matrices, this may
   // not catch certain enantiomorphs:
@@ -1471,5 +1480,413 @@ bool XtalComp::compareCurrent()
   DEBUG_STRING("Structure matched!");
   DEBUG_DIV;
 #endif
+  return true;
+}
+
+//
+// Niggli reduction implementation. See:
+//
+// Grosse-Kunstleve RW, Sauter NK, Adams PD. Numerically stable
+// algorithms for the computation of reduced unit cells. Acta
+// Crystallographica Section A Foundations of
+// Crystallography. 2003;60(1):1-6. Available at:
+// http://scripts.iucr.org/cgi-bin/paper?S010876730302186X [Accessed
+// November 24, 2010].
+//
+
+// Swap function for below:
+void swap(double &a, double &b)
+{
+  double t = a;
+  a = b;
+  b = t;
+}
+
+bool XtalComp::ReducedXtal::canonicalizeLattice()
+{
+  const unsigned int iterations = 1000;
+  // Cache volume for later sanity checks
+  const double origVolume = fabs(this->volume());
+
+  // Grab lattice vectors
+  const XcVector v1 (this->v1());
+  const XcVector v2 (this->v2());
+  const XcVector v3 (this->v3());
+
+  // Compute characteristic (step 0)
+  double A    = v1.squaredNorm();
+  double B    = v2.squaredNorm();
+  double C    = v3.squaredNorm();
+  double xi   = 2*v2.dot(v3);
+  double eta  = 2*v1.dot(v3);
+  double zeta = 2*v1.dot(v2);
+
+  // Return value
+  bool ret = false;
+
+  // comparison tolerance
+  double tol = STABLE_COMP_TOL * pow(origVolume, 1.0/3.0);
+
+  // Initialize change of basis matrices:
+  //
+  // Although the reduction algorithm produces quantities directly
+  // relatible to a,b,c,alpha,beta,gamma, we will calculate a change
+  // of basis matrix to use instead, and discard A, B, C, xi, eta,
+  // zeta. By multiplying the change of basis matrix against the
+  // current cell matrix, we avoid the problem of handling the
+  // orientation matrix already present in the cell. The inverse of
+  // this matrix can also be used later to convert the atomic
+  // positions.
+  // tmpMat is used to build other matrices
+  XcMatrix tmpMat;
+
+  // Cache static matrices:
+
+  // Swap x,y (Used in Step 1). Negatives ensure proper sign of final
+  // determinant.
+  const XcMatrix C1 (0.0,-1.0,0.0, -1.0,0.0,0.0, 0.0,0.0,-1.0);
+  // Swap y,z (Used in Step 2). Negatives ensure proper sign of final
+  // determinant
+  const XcMatrix C2 (-1.0,0.0,0.0, 0.0,0.0,-1.0, 0.0,-1.0,0.0);
+  // For step 8:
+  const XcMatrix C8 (1.0,0.0,1.0, 0.0,1.0,1.0, 0.0,0.0,1.0);
+
+  // initial change of basis matrix
+  XcMatrix cob (1.0,0.0,0.0, 0.0,1.0,0.0, 0.0,0.0,1.0);
+
+  // Enable debugging output here:
+  //#define NIGGLI_DEBUG(step) qDebug() << iter << step << A << B << C << xi << eta << zeta << cob.determinant(); \
+  //std::cout << cob << std::endl;
+#define NIGGLI_DEBUG(step)
+
+  unsigned int iter;
+  for (iter = 0; iter < iterations; ++iter) {
+    assert(fabs(cob.determinant() - 1.0) < 1e-5);
+    // Step 1:
+    if (
+        StableComp::gt(A, B, tol)
+        || (
+            StableComp::eq(A, B, tol)
+            &&
+            StableComp::gt(fabs(xi), fabs(eta), tol)
+            )
+        ) {
+      cob *= C1;
+      swap(A, B);
+      swap(xi, eta);
+      NIGGLI_DEBUG(1);
+      ++iter;
+    }
+
+    // Step 2:
+    if (
+        StableComp::gt(B, C, tol)
+        || (
+            StableComp::eq(B, C, tol)
+            &&
+            StableComp::gt(fabs(eta), fabs(zeta), tol)
+            )
+        ) {
+      cob *= C2;
+      swap(B, C);
+      swap(eta, zeta);
+      NIGGLI_DEBUG(2);
+      continue;
+    }
+
+    double xiEtaZeta = xi*eta*zeta;
+    // Step 3:
+    if (StableComp::gt(xiEtaZeta, 0, tol)) {
+      // Update change of basis matrix:
+      tmpMat.fill
+        (StableComp::sign(xi),0,0,
+         0,StableComp::sign(eta),0,
+         0,0,StableComp::sign(zeta));
+      cob *= tmpMat;
+
+      // Update characteristic
+      xi   = fabs(xi);
+      eta  = fabs(eta);
+      zeta = fabs(zeta);
+      NIGGLI_DEBUG(3);
+      ++iter;
+    }
+
+    // Step 4:
+    if (StableComp::leq(xiEtaZeta, 0, tol)) {
+      // Update change of basis matrix:
+      double *p = 0;
+      double i = 1;
+      double j = 1;
+      double k = 1;
+      if (StableComp::gt(xi, 0, tol)) {
+        i = -1;
+      }
+      else if (!StableComp::lt(xi, 0, tol)) {
+        p = &i;
+      }
+      if (StableComp::gt(eta, 0, tol)) {
+        j = -1;
+      }
+      else if (!StableComp::lt(eta, 0, tol)) {
+        p = &j;
+      }
+      if (StableComp::gt(zeta, 0, tol)) {
+        k = -1;
+      }
+      else if (!StableComp::lt(zeta, 0, tol)) {
+        p = &k;
+      }
+      if (StableComp::lt(i*j*k, 0, tol)) {
+        assert (p);
+        *p = -1;
+      }
+      tmpMat.fill(i,0,0, 0,j,0, 0,0,k);
+      cob *= tmpMat;
+
+      // Update characteristic
+      xi   = -fabs(xi);
+      eta  = -fabs(eta);
+      zeta = -fabs(zeta);
+      NIGGLI_DEBUG(4);
+      ++iter;
+    }
+
+    // Step 5:
+    if (StableComp::gt(fabs(xi), B, tol)
+        || (StableComp::eq(xi, B, tol)
+            && StableComp::lt(2*eta, zeta, tol)
+              )
+        || (StableComp::eq(xi, -B, tol)
+            && StableComp::lt(zeta, 0, tol)
+            )
+        ) {
+      const double signXi = StableComp::sign(xi);
+      // Update change of basis matrix:
+      tmpMat.fill(1,0,0, 0,1,-signXi, 0,0,1);
+      cob *= tmpMat;
+
+      // Update characteristic
+      C    = B + C - xi*signXi;
+      eta  = eta - zeta*signXi;
+      xi   = xi -   2*B*signXi;
+      NIGGLI_DEBUG(5);
+      continue;
+    }
+
+    // Step 6:
+    if (StableComp::gt(fabs(eta), A, tol)
+        || (StableComp::eq(eta, A, tol)
+            && StableComp::lt(2*xi, zeta, tol)
+            )
+        || (StableComp::eq(eta, -A, tol)
+            && StableComp::lt(zeta, 0, tol)
+            )
+        ) {
+      const double signEta = StableComp::sign(eta);
+      // Update change of basis matrix:
+      tmpMat.fill(1,0,-signEta, 0,1,0, 0,0,1);
+      cob *= tmpMat;
+
+      // Update characteristic
+      C    = A + C - eta*signEta;
+      xi   = xi - zeta*signEta;
+      eta  = eta - 2*A*signEta;
+      NIGGLI_DEBUG(6);
+      continue;
+    }
+
+    // Step 7:
+    if (StableComp::gt(fabs(zeta), A, tol)
+        || (StableComp::eq(zeta, A, tol)
+            && StableComp::lt(2*xi, eta, tol)
+            )
+        || (StableComp::eq(zeta, -A, tol)
+            && StableComp::lt(eta, 0, tol)
+            )
+        ) {
+      const double signZeta = StableComp::sign(zeta);
+      // Update change of basis matrix:
+      tmpMat.fill(1,-signZeta,0, 0,1,0, 0,0,1);
+      cob *= tmpMat;
+
+      // Update characteristic
+      B    = A + B - zeta*signZeta;
+      xi   = xi - eta*signZeta;
+      zeta = zeta - 2*A*signZeta;
+      NIGGLI_DEBUG(7);
+      continue;
+    }
+
+    // Step 8:
+    const double sumAllButC = A + B + xi + eta + zeta;
+    if (StableComp::lt(sumAllButC, 0, tol)
+        || (StableComp::eq(sumAllButC, 0, tol)
+            && StableComp::gt(2*(A+eta)+zeta, 0, tol)
+            )
+        ) {
+      // Update change of basis matrix:
+      cob *= C8;
+
+      // Update characteristic
+      C    = sumAllButC + C;
+      xi = 2*B + xi + zeta;
+      eta  = 2*A + eta + zeta;
+      NIGGLI_DEBUG(8);
+      continue;
+    }
+
+    // Done!
+    NIGGLI_DEBUG(999);
+    ret = true;
+    break;
+  }
+
+  // iterations exceeded
+  if (!ret) {
+    fprintf(stderr, "Number of iterations exceeded in Niggli reduction.\n");
+  }
+  else {
+    assert (fabs(cob.determinant() - 1.0) < 1e-5);
+    // Update cell
+    this->m_cmat *= cob;
+    // Check that volume has not changed
+    assert (StableComp::eq(origVolume, this->volume(), tol));
+  }
+
+  // Rotate to std orientation and wrap atoms into new cell
+  const XcMatrix stdCell = this->getCellMatrixInStandardOrientation();
+  const XcMatrix rot = stdCell * this->m_cmat.inverse();
+  const XcMatrix newFracMat = stdCell.inverse();
+  this->m_cmat = stdCell;
+  this->m_fmat = newFracMat;
+  // Convert coordinates
+  assert (m_fcoords.size() == m_ccoords.size());
+  for (size_t i = 0; i < m_fcoords.size(); ++i) {
+    XcVector &ccoord = this->m_ccoords[i];
+    XcVector &fcoord = this->m_fcoords[i];
+    // Update coords
+    ccoord = rot * ccoord;
+    fcoord = newFracMat * ccoord;
+    // wrap fcoord
+    if ((fcoord(0) = fmod(fcoord(0), 1.0)) < 0) ++fcoord(0);
+    if ((fcoord(1) = fmod(fcoord(1), 1.0)) < 0) ++fcoord(1);
+    if ((fcoord(2) = fmod(fcoord(2), 1.0)) < 0) ++fcoord(2);
+  }
+
+  return true;
+}
+
+XcMatrix XtalComp::ReducedXtal::getCellMatrixInStandardOrientation() const
+{
+  // Extract vector components:
+  const double &x1 = m_cmat(0,0);
+  const double &y1 = m_cmat(1,0);
+  const double &z1 = m_cmat(2,0);
+
+  const double &x2 = m_cmat(0,1);
+  const double &y2 = m_cmat(1,1);
+  const double &z2 = m_cmat(2,1);
+
+  const double &x3 = m_cmat(0,2);
+  const double &y3 = m_cmat(1,2);
+  const double &z3 = m_cmat(2,2);
+
+  // Cache some frequently used values:
+  // Length of v1
+  const double L1 = sqrt(x1*x1 + y1*y1 + z1*z1);
+  // Squared norm of v1's yz projection
+  const double sqrdnorm1yz = y1*y1 + z1*z1;
+  // Squared norm of v2's yz projection
+  const double sqrdnorm2yz = y2*y2 + z2*z2;
+  // Determinant of v1 and v2's projections in yz plane
+  const double detv1v2yz = y2*z1 - y1*z2;
+  // Scalar product of v1 and v2's projections in yz plane
+  const double dotv1v2yz = y1*y2 + z1*z2;
+
+  // Used for denominators, since we want to check that they are
+  // sufficiently far from 0 to keep things reasonable:
+  double denom;
+  const double DENOM_TOL = 1e-5;
+
+  // Create target matrix, fill with zeros
+  XcMatrix newMat ( 0.0 );
+
+  // Set components of new v1:
+  newMat(0,0) = L1;
+
+  // Set components of new v2:
+  denom = L1;
+  newMat(0,1) = (x1*x2 + y1*y2 + z1*z2) / denom;
+
+  newMat(1,1) = sqrt(x2*x2 * sqrdnorm1yz +
+                     detv1v2yz*detv1v2yz -
+                     2*x1*x2*dotv1v2yz +
+                     x1*x1*sqrdnorm2yz) / denom;
+
+  // Set components of new v3
+  // denom is still L1
+  assert (denom == L1);
+  newMat(0,2) = (x1*x3 + y1*y3 + z1*z3) / denom;
+
+  denom = L1*L1 * newMat(1,1);
+  newMat(1,2) = (x1*x1*(y2*y3 + z2*z3) +
+                 x2*(x3*sqrdnorm1yz -
+                     x1*(y1*y3 + z1*z3)
+                     ) +
+                 detv1v2yz*(y3*z1 - y1*z3) -
+                 x1*x3*dotv1v2yz) / denom;
+
+  denom = L1 * newMat(1,1);
+  // Numerator is determinant of original cell:
+  newMat(2,2) = (x1*y2*z3 - x1*y3*z2 +
+                 x2*y3*z1 - x2*y1*z3 +
+                 x3*y1*z2 - x3*y2*z1) / denom;
+
+  return newMat;
+}
+
+bool XtalComp::ReducedXtal::isNiggliReduced() const
+{
+  // Calculate characteristic
+  double A    = this->v1().squaredNorm();
+  double B    = this->v2().squaredNorm();
+  double C    = this->v3().squaredNorm();
+  double xi   = 2*this->v2().dot(this->v3());
+  double eta  = 2*this->v1().dot(this->v3());
+  double zeta = 2*this->v1().dot(this->v2());
+
+  // comparison tolerance
+  double tol = STABLE_COMP_TOL * ( this->volume() * (1.0 / 3.0) );
+
+  // First check the Buerger conditions. Taken from: Gruber B.. Acta
+  // Cryst. A. 1973;29(4):433-440. Available at:
+  // http://scripts.iucr.org/cgi-bin/paper?S0567739473001063
+  // [Accessed December 15, 2010].
+  if (StableComp::gt(A, B, tol) || StableComp::gt(B, C, tol)) return false;
+  if (StableComp::eq(A, B, tol) && StableComp::gt(fabs(xi), fabs(eta), tol)) return false;
+  if (StableComp::eq(B, C, tol) && StableComp::gt(fabs(eta), fabs(zeta), tol)) return false;
+  if ( !(StableComp::gt(xi, 0.0, tol) &&
+         StableComp::gt(eta, 0.0, tol) &&
+         StableComp::gt(zeta, 0.0, tol))
+       &&
+       !(StableComp::leq(zeta, 0.0, tol) &&
+         StableComp::leq(zeta, 0.0, tol) &&
+         StableComp::leq(zeta, 0.0, tol)) ) return false;
+
+  // Check against Niggli conditions (taken from Gruber 1973). The
+  // logic of the second comparison is reversed from the paper to
+  // simplify the algorithm.
+  if (StableComp::eq(xi,    B, tol) && StableComp::gt (zeta, 2*eta,  tol)) return false;
+  if (StableComp::eq(eta,   A, tol) && StableComp::gt (zeta, 2*xi,   tol)) return false;
+  if (StableComp::eq(zeta,  A, tol) && StableComp::gt (eta,  2*xi,   tol)) return false;
+  if (StableComp::eq(xi,   -B, tol) && StableComp::neq(zeta, 0,      tol)) return false;
+  if (StableComp::eq(eta,  -A, tol) && StableComp::neq(zeta, 0,      tol)) return false;
+  if (StableComp::eq(zeta, -A, tol) && StableComp::neq(eta,  0,      tol)) return false;
+
+  if (StableComp::eq(xi+eta+zeta+A+B, 0, tol)
+      && StableComp::gt(2*(A+eta)+zeta,  0, tol)) return false;
+
+  // all good!
   return true;
 }

@@ -90,6 +90,22 @@ class XcMatrix
     return *this;
   }
 
+  XcMatrix & fill(const double d00, const double d01, const double d02,
+                  const double d10, const double d11, const double d12,
+                  const double d20, const double d21, const double d22)
+  {
+    this->arr[0][0] = d00;
+    this->arr[0][1] = d01;
+    this->arr[0][2] = d02;
+    this->arr[1][0] = d10;
+    this->arr[1][1] = d11;
+    this->arr[1][2] = d12;
+    this->arr[2][0] = d20;
+    this->arr[2][1] = d21;
+    this->arr[2][2] = d22;
+    return *this;
+  }
+
   XcMatrix & fillRows(const XcVector &v1, const XcVector &v2, const XcVector &v3)
   {
     this->arr[0][0] = v1(0);
