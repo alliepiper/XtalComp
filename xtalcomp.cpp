@@ -233,8 +233,8 @@ bool XtalComp::compare(const XcMatrix &cellMatrix1,
   // Check params here. Do not just compare the matrices, this may
   // not catch certain enantiomorphs:
   // Compare volumes. Tolerance is 1% of this->getVolume()
-  const double vol1 = cellMatrix1.determinant();
-  const double vol2 = cellMatrix2.determinant();
+  const double vol1 = fabs(cellMatrix1.determinant());
+  const double vol2 = fabs(cellMatrix2.determinant());
   // Match volumes to within 1%
   const double voltol = 0.01 * 0.5 * (vol1 + vol2);
   if (fabs(vol1 - vol2) > voltol) return false;
