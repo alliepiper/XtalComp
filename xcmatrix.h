@@ -146,6 +146,11 @@ class XcMatrix
   const double & operator()(const unsigned short row, const unsigned short col) const
   {return arr[row][col];}
 
+  double * operator[](const unsigned short row)
+  {return arr[row];}
+  const double * operator[](const unsigned short row) const
+  {return arr[row];}
+
   XcMatrix & operator*=(const double scalar)
   {
     this->arr[0][0] *= scalar;
@@ -172,6 +177,8 @@ class XcMatrix
 
   XcMatrix & operator*=(const XcMatrix &other)
   {
+    // Probably a smarter way to do this, but be careful overwriting
+    // values. Just use a tmp double for swaps.
     return *this = (*this * other);
   }
 

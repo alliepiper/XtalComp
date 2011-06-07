@@ -4,14 +4,13 @@
 
   Copyright (C) 2011 by David C. Lonie
 
-  This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation version 2 of the License.
+  This source code is released under the New BSD License, (the "License").
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ***********************************************************************/
 
 #include "xtalcomp.h"
@@ -676,8 +675,9 @@ void XtalComp::findCandidateTransforms()
               DEBUG_VECTOR(-(*atm1));
               DEBUG_STRING("Rotation");
               DEBUG_MATRIX(R);
-              DEBUG_STRING("Transform:");
-              DEBUG_MATRIX4(transform.matrix());
+              DEBUG_STRING("transform: rot, trans");
+              DEBUG_MATRIX(transform.rotation());
+              DEBUG_VECTOR(transform.translation());
 #endif
               // Verify that this is a pure rot/ref matrix
               assert(fabs(fabs(R.determinant()) - 1.0) < 1e-3);
@@ -715,8 +715,9 @@ void XtalComp::applyNextTransform()
   m_transform = m_transforms[m_transformsIndex];
 
 #ifdef XTALCOMP_DEBUG
-  DEBUG_STRING("Transform:");
-  DEBUG_MATRIX4(m_transform.matrix());
+  DEBUG_STRING("m_transform: rot, trans");
+  DEBUG_MATRIX(m_transform.rotation());
+  DEBUG_VECTOR(m_transform.translation());
 #endif
 
   buildTransformedXtal2();
@@ -770,8 +771,8 @@ void XtalComp::buildTransformedXtal2()
   fracTransform.prerotate(m_transformedFMat);
 #ifdef XTALCOMP_DEBUG
   DEBUG_STRING("FracTransform: rot, trans");
-  DEBUG_MATRIX(m_transform.getRotation());
-  DEBUG_VECTOR(m_transform.getTranslation());
+  DEBUG_MATRIX(fracTransform.rotation());
+  DEBUG_VECTOR(fracTransform.translation());
 #endif
   // Now to perform the transformations
   m_transformedFCoords.clear();
