@@ -274,6 +274,7 @@ bool parsePOSCAR(char *str, XcMatrix &cell,
   std::string stdstr (str);
   std::istringstream lines (stdstr);
   std::string line;
+  bool cart = false;
 
   // First line is comment
   getline(lines, line);
@@ -307,6 +308,9 @@ bool parsePOSCAR(char *str, XcMatrix &cell,
   // Apply scale:
   cell *= scale;
 
+  // Store frac->cart matrix
+  XcMatrix toCart = cell.transpose().inverse();
+
   // List of atom types
   std::vector<int> counts (15); // Allow up to 15 atom types.
   getline(lines, line);
@@ -320,11 +324,23 @@ bool parsePOSCAR(char *str, XcMatrix &cell,
 
   if (numTypes > 15) return false;
 
-  // coordinate spec -- we assume fractional coordinates
+  // Starts with either [Ss]elective dynamics, [KkCc]artesian, or
+  // other for fractional coords.
   getline(lines, line);
 
+  // If selective dynamics, get the next line
+  if (line.at(0) == 'S' || line.at(0) == 's')
+    getline(lines, line);
+
+  // Check if we're using cartesian or fractional coordinates:
+  if (line.at(0) == 'K' || line.at(0) == 'k' ||
+      line.at(0) == 'C' || line.at(0) == 'c' )
+    cart = true;
+  else
+    cart = false;
+
+
   // Coordinates
-  XcVector tmp;
   // determine number of atoms:
   types.clear();
   int numAtoms = 0;
@@ -340,16 +356,25 @@ bool parsePOSCAR(char *str, XcMatrix &cell,
   Debug("numAtoms:", numAtoms);
 
   // Grab vectors
+  XcVector tmp;
   pos.clear();
   for (int atom_i = 0; atom_i < numAtoms; ++atom_i) {
     getline(lines, line);
     if (sscanf(line.c_str(), "%f %f %f",
                &x, &y, &z) != 3) return false;
+    tmp = XcVector(x,y,z);
     debug += "pos line: " + line + "\n";
-    Debug("x: ", x);
-    Debug("y: ", y);
-    Debug("z: ", z);
-    pos.push_back(XcVector(x,y,z));
+    Debug("x: ", tmp.x());
+    Debug("y: ", tmp.y());
+    Debug("z: ", tmp.z());
+    if (cart) {
+      tmp = toCart * tmp;
+      debug += "Converted to cartesian:\n";
+      Debug("x: ", tmp.x());
+      Debug("y: ", tmp.y());
+      Debug("z: ", tmp.z());
+    }
+    pos.push_back(tmp);
   }
 
   Debug("pos size: ", pos.size());
