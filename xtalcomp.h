@@ -77,7 +77,6 @@ class XtalComp
   void setLeastFrequentAtomInfo();
   void setReferenceBasis();
   void pretranslateRx1();
-  void setTransforms();
 
   // Are there more comparisons to make?
   bool hasMoreTransforms() const;
