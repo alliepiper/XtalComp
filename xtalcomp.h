@@ -50,6 +50,9 @@ class XtalComp
    * @param cellMatrix2 Cell vectors of second description
    * @param types2 Atomic numbers of second description
    * @param positions2 Fractional coordinates of second description
+   * @param transform Array to be overwritten with a row-major matrix
+   * representing the transformation used if the structures are determined
+   * to match.
    * @param cartTol Tolerance for atomic position comparisons in cartesian units
    * @params angleTol Used for matching candidate sublattices -- default of
    * 0.25 degrees should be sufficient.
@@ -77,7 +80,7 @@ class XtalComp
 
   void setLeastFrequentAtomInfo();
   void setReferenceBasis();
-  void pretranslateRx1();
+  void prepareRx1();
   void getCurrentTransform(float[16]);
 
   // Are there more comparisons to make?

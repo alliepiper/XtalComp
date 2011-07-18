@@ -166,21 +166,24 @@ public:
   }
 
   // Translate member coords by the fractional translation vector fracTrans
-  void translateCoords(const XcVector & fracTrans)
+  void translateAndExpandCoords(const XcVector & fracTrans,
+                                const float cartLengthTol)
   {
+    // Translate coords
+    for(std::vector<XcVector>::iterator it = m_fcoords.begin(),
+        it_end = m_fcoords.end(); it != it_end; ++it) {
+      *it += fracTrans;
+    }
+
+    // Expand / wrap fcoords
+    XtalComp::expandFractionalCoordinates(&m_types, &m_fcoords, m_cmat,
+                                          cartLengthTol);
+
+    // update ccoords:
+    m_ccoords.resize(m_fcoords.size());
+    m_numAtoms = m_fcoords.size();
     for (size_t i = 0; i < m_numAtoms; ++i) {
-      XcVector &fcoord = m_fcoords[i];
-      // Translate fractional coord
-      fcoord += fracTrans;
-
-      // wrap to cell: Take modulus, then add 1 if modulus is
-      // negative
-      if ((fcoord(0) = fmod(fcoord(0), 1.0)) < 0) ++fcoord(0);
-      if ((fcoord(1) = fmod(fcoord(1), 1.0)) < 0) ++fcoord(1);
-      if ((fcoord(2) = fmod(fcoord(2), 1.0)) < 0) ++fcoord(2);
-
-      // Update cartesian coord
-      frac2Cart(fcoord, &m_ccoords[i]);
+      frac2Cart(m_fcoords[i], &m_ccoords[i]);
     }
   }
 };
@@ -302,7 +305,7 @@ XtalComp::XtalComp(ReducedXtal *x1, ReducedXtal *x2,
 {
   setLeastFrequentAtomInfo();
   setReferenceBasis();
-  pretranslateRx1();
+  prepareRx1();
   buildSuperLfCCoordList2();
 
 #ifdef XTALCOMP_DEBUG
@@ -376,7 +379,7 @@ void XtalComp::setReferenceBasis()
   m_refVec3 = m_rx1->cmat().col(2);
 }
 
-void XtalComp::pretranslateRx1()
+void XtalComp::prepareRx1()
 {
   // Find a translation vector that moves an lfAtom in rx1 to the
   // origin (e.g., the negative of an lfAtom's coordinates)
@@ -397,7 +400,7 @@ void XtalComp::pretranslateRx1()
   XcVector rx1_ftrans = - (m_rx1->fcoords()[refTransIndex]);
 
   // Translate rx1 by the above vector. This places a lfAtom at the origin.
-  m_rx1->translateCoords(rx1_ftrans);
+  m_rx1->translateAndExpandCoords(rx1_ftrans, m_lengthtol);
 }
 
 void XtalComp::getCurrentTransform(float ret[16])
@@ -825,10 +828,8 @@ void XtalComp::buildTransformedXtal2()
     m_transformedFCoords.push_back(fracTransform * (*it));
   }
 
-  // Expand cell near boundaries. This will also wrap the atoms to
-  // the cell
-  expandFractionalCoordinates(&m_transformedTypes, &m_transformedFCoords,
-                              m_transformedCMat, m_lengthtol);
+  // Don't bother wrapping these into the new unit cell -- they will be
+  // translated in rx1's cell during the comparison.
 
   // Convert to cartesian
   m_transformedCCoords.clear();
@@ -1427,55 +1428,55 @@ bool XtalComp::compareCurrent()
   const std::vector<unsigned int> &rx2_types = m_transformedTypes;
   assert(rx2_ccoords.size() == rx2_types.size());
 
-  bool rx1AtomMatched;
-  XcVector rx1_xformedCoord;
+  bool rx2AtomMatched;
+  XcVector rx2_xformedCoord;
   XcVector diffVec;
 
-  // Iterate through all atoms in rx1
-  for (size_t rx1Ind = 0; rx1Ind < rx1_types.size(); ++rx1Ind) {
-    const unsigned int &rx1_type = rx1_types[rx1Ind];
-    const XcVector &rx1_ccoord = rx1_ccoords[rx1Ind];
-    rx1AtomMatched = false;
+  // Iterate through all atoms in rx2
+  for (size_t rx2Ind = 0; rx2Ind < rx2_types.size(); ++rx2Ind) {
+    const unsigned int &rx2_type = rx2_types[rx2Ind];
+    const XcVector &rx2_ccoord = rx2_ccoords[rx2Ind];
+    rx2AtomMatched = false;
 
 #ifdef XTALCOMP_DEBUG
-    DEBUG_STRING("Rx1 atom:");
-    DEBUG_ATOM(rx1_type, rx1_ccoord);
+    DEBUG_STRING("Rx2 atom:");
+    DEBUG_ATOM(rx2_type, rx2_ccoord);
 #endif
 
-    // convert rx1_ccoord to the transformed cell's basis:
-    rx1_xformedCoord = m_transformedFMat * rx1_ccoord;
+    // convert rx2_ccoord to rx1's basis:
+    rx2_xformedCoord = m_rx1->fmat() * rx2_ccoord;
 
     // Wrap to cell
-    if ((rx1_xformedCoord[0] = fmod(rx1_xformedCoord[0], 1.0)) < 0) ++rx1_xformedCoord[0];
-    if ((rx1_xformedCoord[1] = fmod(rx1_xformedCoord[1], 1.0)) < 0) ++rx1_xformedCoord[1];
-    if ((rx1_xformedCoord[2] = fmod(rx1_xformedCoord[2], 1.0)) < 0) ++rx1_xformedCoord[2];
+    if ((rx2_xformedCoord[0] = fmod(rx2_xformedCoord[0], 1.0)) < 0) ++rx2_xformedCoord[0];
+    if ((rx2_xformedCoord[1] = fmod(rx2_xformedCoord[1], 1.0)) < 0) ++rx2_xformedCoord[1];
+    if ((rx2_xformedCoord[2] = fmod(rx2_xformedCoord[2], 1.0)) < 0) ++rx2_xformedCoord[2];
 
     // convert back to a cartesian coordinate
-    rx1_xformedCoord = m_transformedCMat * rx1_xformedCoord;
+    rx2_xformedCoord = m_rx1->cmat() * rx2_xformedCoord;
 
 #ifdef XTALCOMP_DEBUG
-    DEBUG_STRING("Rx1 atom, wrapped to Rx2's cell:");
-    DEBUG_ATOM(rx1_type, rx1_xformedCoord);
+    DEBUG_STRING("Rx2 atom, wrapped to Rx1's cell:");
+    DEBUG_ATOM(rx2_type, rx2_xformedCoord);
 #endif
 
-    // Iterate through all atoms in rx2
-    for (size_t rx2Ind = 0; rx2Ind < rx2_types.size(); ++rx2Ind) {
-      // If the types don't match, move to the next rx2 atom
-      const unsigned int &rx2_type = rx2_types[rx2Ind];
+    // Iterate through all atoms in rx1
+    for (size_t rx1Ind = 0; rx1Ind < rx1_types.size(); ++rx1Ind) {
+      // If the types don't match, move to the next rx1 atom
+      const unsigned int &rx1_type = rx1_types[rx1Ind];
 #ifdef XTALCOMP_DEBUG
-      printf("Rx2 type: %d\n", rx2_type);
+      printf("Rx1 type: %d\n", rx1_type);
 #endif
       if (rx1_type != rx2_type) {
         continue;
       }
 
       // If the coordinates don't match, move to the next rx2 atom
-      const XcVector &rx2_ccoord = rx2_ccoords[rx2Ind];
+      const XcVector &rx1_ccoord = rx1_ccoords[rx1Ind];
 #ifdef XTALCOMP_DEBUG
-      DEBUG_STRING("Rx2 coords:");
-      DEBUG_VECTOR(rx2_ccoord);
+      DEBUG_STRING("Rx1 coords:");
+      DEBUG_VECTOR(rx1_ccoord);
 #endif
-      diffVec = rx1_xformedCoord - rx2_ccoord;
+      diffVec = rx2_xformedCoord - rx1_ccoord;
 #ifdef XTALCOMP_DEBUG
       DEBUG_STRING("Diffvec:");
       DEBUG_VECTOR(diffVec);
@@ -1486,11 +1487,11 @@ bool XtalComp::compareCurrent()
       }
 
       // Otherwise, the atoms match. move to next atom
-      rx1AtomMatched = true;
+      rx2AtomMatched = true;
       break;
     }
     // If the current rx1Atom was not matched, fail:
-    if (!rx1AtomMatched) {
+    if (!rx2AtomMatched) {
 #ifdef XTALCOMP_DEBUG
       DEBUG_STRING("Not a match.");
       DEBUG_DIV;
