@@ -168,6 +168,8 @@ int main() {
 
   float cartTol, angleTol;
 
+  float transform[16];
+
   bool validInput = true;
 
   for (int i=0; cgivars[i]; i+= 2) {
@@ -203,7 +205,7 @@ int main() {
 
   bool match = XtalComp::compare(cell1, types1, pos1,
                                  cell2, types2, pos2,
-                                 cartTol, angleTol);
+                                 transform, cartTol, angleTol);
 
   printf("Content-type: text/html\n\n");
 
@@ -214,6 +216,26 @@ int main() {
   printf("Using a cartesian tolerance of %f and an angular tolerance of %f...<br><br>\n",
          cartTol, angleTol);
   printf("The structures %s match!<br>\n", (match) ? "DO" : "do NOT");
+  if (match) { // Print transform
+    printf("<font face=\"Courier New, Courier, monospace\">\n");
+    printf("<pre>\n");
+    printf("<h2>Transformation matrix:</h2>\n");
+    printf("|--%10s--%10s--%10s--%10s--|\n", "----------", "----------",
+           "----------", "----------");
+    printf("|  %+10.5f  %+10.5f  %+10.5f  %+10.5f  |\n",
+           transform[0*4+0], transform[0*4+1], transform[0*4+2], transform[0*4+3]);
+    printf("|  %+10.5f  %+10.5f  %+10.5f  %+10.5f  |\n",
+           transform[1*4+0], transform[1*4+1], transform[1*4+2], transform[1*4+3]);
+    printf("|  %+10.5f  %+10.5f  %+10.5f  %+10.5f  |\n",
+           transform[2*4+0], transform[2*4+1], transform[2*4+2], transform[2*4+3]);
+    printf("|  %+10.5f  %+10.5f  %+10.5f  %+10.5f  |\n",
+           transform[3*4+0], transform[3*4+1], transform[3*4+2], transform[3*4+3]);
+    printf("|--%10s--%10s--%10s--%10s--|\n", "----------", "----------",
+           "----------", "----------");
+    printf("</pre>\n");
+    printf("</font>\n") ;
+    }
+
   printf("<h1>Input structures:</h1>\n") ;
   printf("<font face=\"Courier New, Courier, monospace\">\n");
   printf("<pre>\n");
@@ -245,8 +267,8 @@ int main() {
 
   //printf("debug: \n%s\n", debug.c_str());
   printf("</pre>\n");
-  //printf("<!--#include virtual=\"xtalcompcounter.cgi\" -->\n");
   printf("</font>\n") ;
+  //printf("<!--#include virtual=\"xtalcompcounter.cgi\" -->\n");
   printf("Comparisons performed since June 6th, 2011: "
          "<br><embed src=\"xtalcompcounter.cgi\" />\n");
   printf("</body>\n") ;

@@ -191,16 +191,17 @@ bool XtalComp::compare(const XcMatrix &cellMatrix1,
                        const XcMatrix &cellMatrix2,
                        const std::vector<unsigned int> &types2,
                        const std::vector<XcVector> &positions2,
+                       float transform[16],
                        const double cartTol,
                        const double angleTol)
 {
   // First check that types and positions are of the same size
   if (types1.size() != positions1.size() ||
       types2.size() != positions2.size() ){
-    fprintf(stderr, "XtalComp::compare was given a structure description with differing "
-            "numbers of types and positions:\n\ttypes1: %d positions1: %d"
-            "\n\ttypes2: %d positions2: %d\n", types1.size(), positions1.size(),
-            types2.size(), positions2.size());
+    fprintf(stderr, "XtalComp::compare was given a structure description with"
+            " differing numbers of types and positions:\n\ttypes1: %d "
+            "positions1: %d\n\ttypes2: %d positions2: %d\n", types1.size(),
+            positions1.size(),types2.size(), positions2.size());
     return false;
   }
 
@@ -272,6 +273,9 @@ bool XtalComp::compare(const XcMatrix &cellMatrix1,
   while (xc.hasMoreTransforms()) {
     xc.applyNextTransform();
     if (xc.compareCurrent()) {
+      if (transform != NULL) {
+        xc.getCurrentTransform(transform);
+        }
       // Found a match!
       return true;
     }
@@ -394,6 +398,33 @@ void XtalComp::pretranslateRx1()
 
   // Translate rx1 by the above vector. This places a lfAtom at the origin.
   m_rx1->translateCoords(rx1_ftrans);
+}
+
+void XtalComp::getCurrentTransform(float ret[16])
+{
+  // Fill ret with the 4x4 matrix of the current transform.
+  const XcVector &trans = m_transform.translation();
+  const XcMatrix &rot   = m_transform.rotation();
+
+  ret[0*4+0] =   rot(0,0);
+  ret[0*4+1] =   rot(0,1);
+  ret[0*4+2] =   rot(0,2);
+  ret[0*4+3] = trans(0);
+
+  ret[1*4+0] =   rot(1,0);
+  ret[1*4+1] =   rot(1,1);
+  ret[1*4+2] =   rot(1,2);
+  ret[1*4+3] = trans(1);
+
+  ret[2*4+0] =   rot(2,0);
+  ret[2*4+1] =   rot(2,1);
+  ret[2*4+2] =   rot(2,2);
+  ret[2*4+3] = trans(2);
+
+  ret[3*4+0] = 0.0;
+  ret[3*4+1] = 0.0;
+  ret[3*4+2] = 0.0;
+  ret[3*4+3] = 1.0;
 }
 
 void XtalComp::buildSuperLfCCoordList2()

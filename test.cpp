@@ -52,13 +52,17 @@ bool simpleCase()
   types1.push_back(1);
   std::vector<unsigned int> types2 (types1);
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                           cell2, types2, pos2,
+                                           NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                      cell2, types2, pos2,
+                                      NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -103,13 +107,17 @@ bool simpleNiggli()
     *it = fcoordUpdate * (*it);
   }
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                           cell2, types2, pos2,
+                                           NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                      cell2, types2, pos2,
+                                      NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -149,13 +157,17 @@ bool simpleUniformTranslation()
     (*it) += disp;
   }
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                           cell2, types2, pos2,
+                                           NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                      cell2, types2, pos2,
+                                      NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -203,13 +215,17 @@ bool simpleRandomNoise()
     (*it) += disp;
   }
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                           cell2, types2, pos2,
+                                           NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                      cell2, types2, pos2,
+                                      NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -291,13 +307,17 @@ bool allOfTheAbove()
   }
   //******************************************************************
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                           cell2, types2, pos2,
+                                           NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1, cell2, types2, pos2, 0.05, 0.25);
+  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
+                                      cell2, types2, pos2,
+                                      NULL, 0.05, 0.25);
   if (match)
     return false;
 

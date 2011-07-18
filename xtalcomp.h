@@ -62,6 +62,7 @@ class XtalComp
                       const XcMatrix &cellMatrix2,
                       const std::vector<unsigned int> &types2,
                       const std::vector<XcVector> &positions2,
+                      float transform[16] = 0,
                       const double cartTol = 0.05,
                       const double angleTol = 0.25);
 
@@ -77,6 +78,7 @@ class XtalComp
   void setLeastFrequentAtomInfo();
   void setReferenceBasis();
   void pretranslateRx1();
+  void getCurrentTransform(float[16]);
 
   // Are there more comparisons to make?
   bool hasMoreTransforms() const;
