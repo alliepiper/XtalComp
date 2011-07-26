@@ -474,7 +474,7 @@ void XtalComp::buildSuperLfCCoordList2()
     const XcVector v19(v17 + v2); // 2 2 1
     const XcVector v20(v19 + v3); // 2 2 2
     const XcVector v21(v2  + v3); // 0 1 1
-    const XcVector v22(v22 + v3); // 0 1 2
+    const XcVector v22(v21 + v3); // 0 1 2
     const XcVector v23(v2  + v2); // 0 2 0
     const XcVector v24(v23 + v3); // 0 2 1
     const XcVector v25(v24 + v3); // 0 2 2
