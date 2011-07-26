@@ -155,6 +155,7 @@ class XcMatrix
     this->arr[2][0] = 0.0;
     this->arr[2][1] = 0.0;
     this->arr[2][2] = s;
+    return *this;
   }
 
   double & operator()(const unsigned short row, const unsigned short col)
