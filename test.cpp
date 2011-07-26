@@ -17,7 +17,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void runTest(bool (*testFunc)(), const char * testName, int &successes, int &failures)
+void runTest(bool (*testFunc)(), const char * testName, int &successes,
+             int &failures)
 {
   if ((*testFunc)()) {
     fprintf(stdout, "Test '%s' passes.\n", testName);
@@ -52,17 +53,18 @@ bool simpleCase()
   types1.push_back(1);
   std::vector<unsigned int> types2 (types1);
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                           cell2, types2, pos2,
-                                           NULL, 0.05, 0.25);
+  bool match = XtalComp::compare(cell1, types1, pos1,
+                                 cell2, types2, pos2,
+                                 NULL, 0.05, 0.25);
+
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                      cell2, types2, pos2,
-                                      NULL, 0.05, 0.25);
+  match = XtalComp::compare(cell1, types1, pos1,
+                            cell2, types2, pos2,
+                            NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -107,17 +109,17 @@ bool simpleNiggli()
     *it = fcoordUpdate * (*it);
   }
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                           cell2, types2, pos2,
-                                           NULL, 0.05, 0.25);
+  bool match = XtalComp::compare(cell1, types1, pos1,
+                                 cell2, types2, pos2,
+                                 NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                      cell2, types2, pos2,
-                                      NULL, 0.05, 0.25);
+  match = XtalComp::compare(cell1, types1, pos1,
+                            cell2, types2, pos2,
+                            NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -157,17 +159,17 @@ bool simpleUniformTranslation()
     (*it) += disp;
   }
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                           cell2, types2, pos2,
-                                           NULL, 0.05, 0.25);
+  bool match = XtalComp::compare(cell1, types1, pos1,
+                                 cell2, types2, pos2,
+                                 NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                      cell2, types2, pos2,
-                                      NULL, 0.05, 0.25);
+  match = XtalComp::compare(cell1, types1, pos1,
+                            cell2, types2, pos2,
+                            NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -208,24 +210,25 @@ bool simpleRandomNoise()
     // Convert displacement to cartesian units
     disp = cell2.transpose() * disp;
     // Normalize and set length
-    disp *= (rand() / static_cast<double>(RAND_MAX)) * cartesianNoiseMax / disp.norm();
+    disp *= (rand() / static_cast<double>(RAND_MAX))
+        * cartesianNoiseMax / disp.norm();
     // Convert back to fractional units
     disp = cell2.transpose().inverse() * disp;
     // Displace vector
     (*it) += disp;
   }
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                           cell2, types2, pos2,
-                                           NULL, 0.05, 0.25);
+  bool match = XtalComp::compare(cell1, types1, pos1,
+                                 cell2, types2, pos2,
+                                 NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                      cell2, types2, pos2,
-                                      NULL, 0.05, 0.25);
+  match = XtalComp::compare(cell1, types1, pos1,
+                            cell2, types2, pos2,
+                            NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -299,7 +302,8 @@ bool allOfTheAbove()
     // Convert displacement to cartesian units
     disp = cell2.transpose() * disp;
     // Normalize and set length
-    disp *= (rand() / static_cast<double>(RAND_MAX)) * cartesianNoiseMax / disp.norm();
+    disp *= (rand() / static_cast<double>(RAND_MAX))
+        * cartesianNoiseMax / disp.norm();
     // Convert back to fractional units
     disp = cell2.transpose().inverse() * disp;
     // Displace vector
@@ -307,17 +311,17 @@ bool allOfTheAbove()
   }
   //******************************************************************
 
-  bool match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                           cell2, types2, pos2,
-                                           NULL, 0.05, 0.25);
+  bool match = XtalComp::compare(cell1, types1, pos1,
+                                  cell2, types2, pos2,
+                                  NULL, 0.05, 0.25);
   if (!match)
     return false;
 
   // Displace an atom, ensure that comparison fails.
   pos2[0] += XcVector(0.5,0,0);
-  match = XtalComp::XtalComp::compare(cell1, types1, pos1,
-                                      cell2, types2, pos2,
-                                      NULL, 0.05, 0.25);
+  match = XtalComp::compare(cell1, types1, pos1,
+                            cell2, types2, pos2,
+                            NULL, 0.05, 0.25);
   if (match)
     return false;
 
@@ -331,8 +335,10 @@ int main()
 
   runTest(&simpleCase, "Simple Case", successes, failures);
   runTest(&simpleNiggli, "Simple Niggli", successes, failures);
-  runTest(&simpleUniformTranslation, "Simple Uniform Translation", successes, failures);
-  runTest(&simpleUniformTranslation, "Simple Random Noise (max = 0.005 A)", successes, failures);
+  runTest(&simpleUniformTranslation, "Simple Uniform Translation",
+          successes, failures);
+  runTest(&simpleUniformTranslation, "Simple Random Noise (max = 0.005 A)",
+          successes, failures);
   runTest(&allOfTheAbove, "All of the above test", successes, failures);
 
   return failures;
