@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <assert.h>
+#include <iostream>
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -231,8 +232,12 @@ bool XtalComp::compare(const XcMatrix &cellMatrix1,
   ReducedXtal x2 (cellMatrix2, types2, positions2);
 
   // Standardize the lattices
-  x1.canonicalizeLattice();
-  x2.canonicalizeLattice();
+  if (!x1.canonicalizeLattice() ||
+      !x2.canonicalizeLattice() ){
+    std::cerr << "XtalComp warning: Failed to canonicalize one of the "
+                 "lattices. Returning false without finishing comparison.\n";
+    return false;
+  }
 
   // Check params here. Do not just compare the matrices, this may
   // not catch certain enantiomorphs:
@@ -1670,7 +1675,20 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
         p = &k;
       }
       if (StableComp::lt(i*j*k, 0, tol)) {
-        assert (p);
+        // If p has not been assigned, then we are dealing with a rare case
+        // where the lattice is confusing the "fuzzy" comparisons used to
+        // treat numeric noise. There isn't much we can do here; print an
+        // error and return false. Patches are welcome for error handling ;-)
+        if (!p) {
+          std::cerr << "XtalComp warning: one of the input structures "
+                       "contains a lattice that is confusing the Niggli "
+                       "reduction algorithm. Try making a small perturbation "
+                       "(approx. 2 orders of magnitude smaller than the "
+                       "tolerance) to the input lattices and try again. The "
+                       "results of this comparison should not be relied upon."
+                       "\n";
+          return false;
+        }
         *p = -1;
       }
       tmpMat.fill(i,0,0, 0,j,0, 0,0,k);
