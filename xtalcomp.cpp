@@ -727,8 +727,9 @@ void XtalComp::findCandidateTransforms()
               DEBUG_MATRIX(transform.rotation());
               DEBUG_VECTOR(transform.translation());
 #endif
-              // Verify that this is a pure rot/ref matrix
-              assert(fabs(fabs(R.determinant()) - 1.0) < 1e-3);
+              // Verify that this is a pure rot/ref matrix (allow a rather
+              // large fudge factor here -- the vectors may not match exactly)
+              assert(fabs(fabs(R.determinant()) - 1.0) < .1);
             }
           }
         }
@@ -1563,6 +1564,7 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
 
   // comparison tolerance
   double tol = STABLE_COMP_TOL * pow(origVolume, 1.0/3.0);
+//  const double tol = 1e-5;
 
   // Initialize change of basis matrices:
   //
@@ -1598,7 +1600,7 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
 
   unsigned int iter;
   for (iter = 0; iter < iterations; ++iter) {
-    assert(fabs(cob.determinant() - 1.0) < 1e-5);
+    assert(fabs(fabs(cob.determinant()) - 1.0) < .01);
     // Step 1:
     if (
         StableComp::gt(A, B, tol)
@@ -1631,9 +1633,9 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
       continue;
     }
 
-    double xiEtaZeta = xi*eta*zeta;
     // Step 3:
-    if (StableComp::gt(xiEtaZeta, 0, tol)) {
+    // Use exact comparisons in steps 3 and 4.
+    if (xi*eta*zeta > 0) {
       // Update change of basis matrix:
       tmpMat.fill
         (StableComp::sign(xi),0,0,
@@ -1650,35 +1652,32 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
     }
 
     // Step 4:
-    if (StableComp::leq(xiEtaZeta, 0, tol)) {
+    // Use exact comparisons for steps 3 and 4
+    else { // either step 3 or 4 should run
       // Update change of basis matrix:
-      double *p = 0;
+      double *p = NULL;
       double i = 1;
       double j = 1;
       double k = 1;
-      if (StableComp::gt(xi, 0, tol)) {
+      if (xi > 0) {
         i = -1;
       }
-      else if (!StableComp::lt(xi, 0, tol)) {
+      else if (!(xi < 0)) {
         p = &i;
       }
-      if (StableComp::gt(eta, 0, tol)) {
+      if (eta > 0) {
         j = -1;
       }
-      else if (!StableComp::lt(eta, 0, tol)) {
+      else if (!(eta < 0)) {
         p = &j;
       }
-      if (StableComp::gt(zeta, 0, tol)) {
+      if (zeta > 0) {
         k = -1;
       }
-      else if (!StableComp::lt(zeta, 0, tol)) {
+      else if (!(zeta < 0)) {
         p = &k;
       }
-      if (StableComp::lt(i*j*k, 0, tol)) {
-        // If p has not been assigned, then we are dealing with a rare case
-        // where the lattice is confusing the "fuzzy" comparisons used to
-        // treat numeric noise. There isn't much we can do here; print an
-        // error and return false. Patches are welcome for error handling ;-)
+      if (i*j*k < 0) {
         if (!p) {
           std::cerr << "XtalComp warning: one of the input structures "
                        "contains a lattice that is confusing the Niggli "
@@ -1797,7 +1796,7 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
     fprintf(stderr, "Number of iterations exceeded in Niggli reduction.\n");
   }
   else {
-    assert (fabs(cob.determinant() - 1.0) < 1e-5);
+    assert (fabs(fabs(cob.determinant()) - 1.0) < 1e-5);
     // Update cell
     this->m_cmat *= cob;
     // Check that volume has not changed
