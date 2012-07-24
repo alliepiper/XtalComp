@@ -14,7 +14,7 @@ translated by an arbitrary vector without modifying the underlying
 structure. Additionally, certain applications may consider
 enantiomorphic structures to be identical.
 
-The XtalOpt algorithm overcomes these issues to detect duplicate
+The XtalComp algorithm overcomes these issues to detect duplicate
 structures regardless of differences in representation. It begins by
 performing a Niggli reduction on the inputs, standardizing the
 translation vectors and orientations. A transform search is performed
@@ -35,7 +35,7 @@ cd build
 ccmake ..
 make
 
-This will build the XtalOpt static library and a sample testing
+This will build the XtalComp static library and a sample testing
 script. To use XtalComp in your application, link to the statically
 built XtalComp library in the "build" directory and include
 xtalcomp.h in your application. See test.cpp for example usage.
