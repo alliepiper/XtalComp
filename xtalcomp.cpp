@@ -178,8 +178,9 @@ public:
     }
 
     // Expand / wrap fcoords
-    XtalComp::expandFractionalCoordinates(&m_types, &m_fcoords, 
-                     duplicatedAtomsVector, m_cmat, cartLengthTol);
+    XtalComp::expandFractionalCoordinates(&m_types, &m_fcoords,
+                                          duplicatedAtomsVector,
+                                          m_cmat, cartLengthTol);
 
     // update ccoords:
     m_ccoords.resize(m_fcoords.size());
@@ -407,7 +408,7 @@ void XtalComp::prepareRx1()
 
   // Translate rx1 by the above vector. This places a lfAtom at the origin.
   m_rx1->translateAndExpandCoords(rx1_ftrans,
-                                  m_lengthtol, 
+                                  m_lengthtol,
                                   &m_duplicatedAtomsVector);
 }
 
@@ -459,7 +460,7 @@ void XtalComp::buildSuperLfCCoordList2()
   const double v3SqNorm = v3.squaredNorm();
   const double diagSqNorm = (v1+v2+v3).squaredNorm();
   const double normTol = 1e-4;
-  
+
   bool diagonalSameLengthAsVector =
       (fabs(diagSqNorm - v1SqNorm) < normTol ||
        fabs(diagSqNorm - v2SqNorm) < normTol ||
@@ -472,7 +473,7 @@ void XtalComp::buildSuperLfCCoordList2()
        (fabs(v1SqNorm - v3SqNorm) < normTol &&
         fabs(compAngle(v1, v3) - 60.0) < m_angletol) ||
        (fabs(v2SqNorm - v3SqNorm) < normTol &&
-        fabs(compAngle(v2, v3) - 60.0) < m_angletol));  
+        fabs(compAngle(v2, v3) - 60.0) < m_angletol));
 
   // 3x3x3 case:
   if (diagonalSameLengthAsVector || cellIsHexagonal) {
@@ -866,7 +867,7 @@ void XtalComp::buildTransformedXtal2()
 
 void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
                                            std::vector<XcVector> *fcoords,
-                                 std::vector<XcVector> *duplicatedAtomsVector,
+                                           std::vector<XcVector> *duplicatedAtomsVector,
                                            const XcMatrix &cmat,
                                            const double tol)
 {
@@ -1085,7 +1086,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
     }
 
     // startingIndex for grouping duplicates at the end of the function
-    unsigned int startingIndex = fcoords->size();    
+    unsigned int startingIndex = fcoords->size();
 
     // Add translated atoms near enough to a corner, edge, or plane
 
@@ -1435,7 +1436,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       goto duplicatedAtoms;
     }
-   
+
     // Once an atom has been matched, it's duplicates should not
     // be matched either.
     // at position [0], i gives the rx1 index of the atom that was duplicated
@@ -1481,7 +1482,7 @@ bool XtalComp::compareCurrent()
   rx1AtomAlreadyMatched.reserve(rx1_types.size());
   for (int i = 0; i < rx1_types.size(); i++) {
     rx1AtomAlreadyMatched[i] = false;
-  } 
+  }
 
   // Iterate through all atoms in rx2
   for (size_t rx2Ind = 0; rx2Ind < rx2_types.size(); ++rx2Ind) {
@@ -1552,17 +1553,17 @@ bool XtalComp::compareCurrent()
         m_duplicatedAtomsVector.size() << std::endl;
 #endif
       // Check for other duplicates to add to rx1AtomAlreadyMatched
-      // m_duplicatedAtomsVector[i][0] is 
+      // m_duplicatedAtomsVector[i][0] is
       for (int i = 0; i < m_duplicatedAtomsVector.size(); i++) {
         if ((m_duplicatedAtomsVector[i][0] == rx1Ind) ||
              (m_duplicatedAtomsVector[i][1] <= rx1Ind && rx1Ind <=
               m_duplicatedAtomsVector[i][2])) {
-          for (int j = m_duplicatedAtomsVector[i][1]; 
+          for (int j = m_duplicatedAtomsVector[i][1];
                 j <= m_duplicatedAtomsVector[i][2]; j++) {
             rx1AtomAlreadyMatched[j] = true;
 #ifdef XTALCOMP_DEBUG
       std::cout << "rx1AtomAlreadyMatched at rx1Ind "<<j<<" = true now\n";
-#endif       
+#endif
           }
           rx1AtomAlreadyMatched[m_duplicatedAtomsVector[i][0]] = true;
 #ifdef XTALCOMP_DEBUG
@@ -1570,7 +1571,7 @@ bool XtalComp::compareCurrent()
       <<int(m_duplicatedAtomsVector[i][0])<< "== true now as well\n";
 #endif
         }
-      } 
+      }
       break;
     }
     // If the current rx1Atom was not matched, fail:

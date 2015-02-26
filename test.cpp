@@ -358,7 +358,7 @@ bool hexagonalCellTest()
   types1.push_back(2);
   types1.push_back(2);
   types1.push_back(3);
-  types1.push_back(3);  
+  types1.push_back(3);
   types1.push_back(3);
   types1.push_back(3);
 
@@ -367,7 +367,7 @@ bool hexagonalCellTest()
   std::swap(pos2[4], pos2[8]);
   std::swap(pos2[5], pos2[9]);
   std::vector<unsigned int> types2 (types1);
- 
+
   bool match = XtalComp::compare(cell1, types1, pos1,
                                  cell2, types2, pos2,
                                  NULL, 0.05, 0.25);
@@ -465,7 +465,6 @@ bool atomsOverlapping()
   types1.push_back(4);
   types1.push_back(4);
   types1.push_back(4);
-
 
   std::vector<unsigned int> types2 (types1);
 

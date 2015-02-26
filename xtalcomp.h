@@ -110,7 +110,7 @@ class XtalComp
   // by the expandedFractionalCoordinates() function from being matched.
   // The vector is appended when duplicates are made, and it is used
   // in compareCurrent() when a match is made.
-  // Please note that this is a heterogenous vector. 
+  // Please note that this is a heterogenous vector.
   // m_duplicatedAtomsVector[0] is the rx1Index of the duplicated atom
   // m_duplicatedAtomsVector[1] is the starting index of the new duplicates
   // m_duplicatedAtomsVector[2] is the ending index of the new duplicates
@@ -124,11 +124,10 @@ class XtalComp
   void findCandidateTransforms();
 
   // Add atoms around cell boundaries for stability during comparisons
-  static void expandFractionalCoordinates(std::vector<unsigned int> *types,
-                                          std::vector<XcVector> *fcoords,
-                                std::vector<XcVector> *duplicatedAtomsVector,
-                                const XcMatrix &cmat, // needed for tol calc
-                                          const double tol);
+  static void expandFractionalCoordinates(
+          std::vector<unsigned int> *types, std::vector<XcVector> *fcoords,
+          std::vector<XcVector> *duplicatedAtomsVector,
+          const XcMatrix &cmat, const double tol);
 
   // Reference vectors:
   XcVector m_refVec1;
