@@ -106,6 +106,18 @@ class XtalComp
   unsigned int m_lfAtomType;
   unsigned int m_lfAtomCount;
 
+  // Duplicated Atoms Vector: made to prevent duplicate atoms produced
+  // by the expandedFractionalCoordinates() function from being matched.
+  // The vector is appended when duplicates are made, and it is used
+  // in compareCurrent() when a match is made.
+  // Please note that this is a heterogenous vector. 
+  // m_duplicatedAtomsVector[0] is the rx1Index of the duplicated atom
+  // m_duplicatedAtomsVector[1] is the starting index of the new duplicates
+  // m_duplicatedAtomsVector[2] is the ending index of the new duplicates
+  // Thus, if rx1 atom at [0] is matched to an rx2 atom, rx1 atoms [1] - [2]
+  // need to indicate that they have already been matched as well.
+  std::vector<XcVector> m_duplicatedAtomsVector;
+
   // Supercell of lfAtoms in xtal2
   void buildSuperLfCCoordList2();
   std::vector<XcVector> m_superLfCCoordList2;
@@ -114,7 +126,8 @@ class XtalComp
   // Add atoms around cell boundaries for stability during comparisons
   static void expandFractionalCoordinates(std::vector<unsigned int> *types,
                                           std::vector<XcVector> *fcoords,
-                                          const XcMatrix &cmat, // needed for tol calc
+                                std::vector<XcVector> *duplicatedAtomsVector,
+                                const XcMatrix &cmat, // needed for tol calc
                                           const double tol);
 
   // Reference vectors:
