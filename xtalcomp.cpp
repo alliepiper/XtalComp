@@ -21,7 +21,6 @@
 #include <assert.h>
 #include <iostream>
 #include <limits.h>
-#include <cmath>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -169,7 +168,8 @@ public:
 
   // Translate member coords by the fractional translation vector fracTrans
   void translateAndExpandCoords(const XcVector & fracTrans,
-                                const float cartLengthTol)
+                                const float cartLengthTol,
+                                std::vector<XcVector> *duplicatedAtomsVector)
   {
     // Translate coords
     for(std::vector<XcVector>::iterator it = m_fcoords.begin(),
@@ -178,8 +178,8 @@ public:
     }
 
     // Expand / wrap fcoords
-    XtalComp::expandFractionalCoordinates(&m_types, &m_fcoords, m_cmat,
-                                          cartLengthTol);
+    XtalComp::expandFractionalCoordinates(&m_types, &m_fcoords, 
+                     duplicatedAtomsVector, m_cmat, cartLengthTol);
 
     // update ccoords:
     m_ccoords.resize(m_fcoords.size());
@@ -406,7 +406,9 @@ void XtalComp::prepareRx1()
   XcVector rx1_ftrans = - (m_rx1->fcoords()[refTransIndex]);
 
   // Translate rx1 by the above vector. This places a lfAtom at the origin.
-  m_rx1->translateAndExpandCoords(rx1_ftrans, m_lengthtol);
+  m_rx1->translateAndExpandCoords(rx1_ftrans,
+                                  m_lengthtol, 
+                                  &m_duplicatedAtomsVector);
 }
 
 void XtalComp::getCurrentTransform(float ret[16])
@@ -457,7 +459,7 @@ void XtalComp::buildSuperLfCCoordList2()
   const double v3SqNorm = v3.squaredNorm();
   const double diagSqNorm = (v1+v2+v3).squaredNorm();
   const double normTol = 1e-4;
-
+  
   bool diagonalSameLengthAsVector =
       (fabs(diagSqNorm - v1SqNorm) < normTol ||
        fabs(diagSqNorm - v2SqNorm) < normTol ||
@@ -470,7 +472,7 @@ void XtalComp::buildSuperLfCCoordList2()
        (fabs(v1SqNorm - v3SqNorm) < normTol &&
         fabs(compAngle(v1, v3) - 60.0) < m_angletol) ||
        (fabs(v2SqNorm - v3SqNorm) < normTol &&
-        fabs(compAngle(v2, v3) - 60.0) < m_angletol));
+        fabs(compAngle(v2, v3) - 60.0) < m_angletol));  
 
   // 3x3x3 case:
   if (diagonalSameLengthAsVector || cellIsHexagonal) {
@@ -864,6 +866,7 @@ void XtalComp::buildTransformedXtal2()
 
 void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
                                            std::vector<XcVector> *fcoords,
+                                 std::vector<XcVector> *duplicatedAtomsVector,
                                            const XcMatrix &cmat,
                                            const double tol)
 {
@@ -1021,6 +1024,10 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
   double delta_c_6_sqNorm;
 
   const size_t numUnexpandedAtoms = fcoords->size();
+
+  duplicatedAtomsVector->clear();
+  duplicatedAtomsVector->reserve(numUnexpandedAtoms);
+
   for (size_t i = 0; i < numUnexpandedAtoms; ++i) {
     XcVector &curVecMut = (*fcoords)[i];
     const unsigned int curType = (*types)[i];
@@ -1077,6 +1084,9 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       continue;
     }
 
+    // startingIndex for grouping duplicates at the end of the function
+    unsigned int startingIndex = fcoords->size();    
+
     // Add translated atoms near enough to a corner, edge, or plane
 
     // First check for corner atoms:
@@ -1108,7 +1118,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 + v2 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Corner 2
     if (nearPlane2 && nearPlane3 && nearPlane4) {
@@ -1127,7 +1137,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 + v2 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Corner 3:
     if (nearPlane1 && nearPlane3 && nearPlane5) {
@@ -1146,7 +1156,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 - v2 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Corner 4:
     if (nearPlane1 && nearPlane2 && nearPlane6) {
@@ -1165,7 +1175,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 + v2 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Corner 5:
     if (nearPlane3 && nearPlane4 && nearPlane5) {
@@ -1184,7 +1194,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 - v2 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Corner 6:
     if (nearPlane1 && nearPlane5 && nearPlane6) {
@@ -1203,7 +1213,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 - v2 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Corner 7:
     if (nearPlane2 && nearPlane4 && nearPlane6) {
@@ -1222,7 +1232,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 + v2 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Corner 8:
     if (nearPlane4 && nearPlane5 && nearPlane6) {
@@ -1241,7 +1251,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 - v2 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
 
     // Check edges
@@ -1263,7 +1273,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v2 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 2
     if (nearPlane1 && nearPlane3) {
@@ -1273,7 +1283,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 3
     if (nearPlane1 && nearPlane2) {
@@ -1283,7 +1293,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 + v2);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 4
     if (nearPlane3 && nearPlane4) {
@@ -1293,7 +1303,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 5
     if (nearPlane2 && nearPlane4) {
@@ -1303,7 +1313,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 + v2);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 6
     if (nearPlane3 && nearPlane5) {
@@ -1313,7 +1323,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v2 + v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 7
     if (nearPlane1 && nearPlane5) {
@@ -1323,7 +1333,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 8
     if (nearPlane1 && nearPlane6) {
@@ -1333,7 +1343,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v1 - v2);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 9
     if (nearPlane2 && nearPlane6) {
@@ -1343,7 +1353,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec + v2 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 10
     if (nearPlane4 && nearPlane5) {
@@ -1353,7 +1363,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 - v2);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 11
     if (nearPlane5 && nearPlane6) {
@@ -1363,7 +1373,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v2 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Edge 12
     if (nearPlane4 && nearPlane6) {
@@ -1373,7 +1383,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       types->push_back(curType);
       fcoords->push_back(curVec - v1 - v3);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
 
     // Check planes:
@@ -1383,7 +1393,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       ++tmpVec1.x();
       fcoords->push_back(tmpVec1);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Plane 2:
     if (nearPlane2) {
@@ -1391,7 +1401,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       ++tmpVec1.y();
       fcoords->push_back(tmpVec1);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Plane 3:
     if (nearPlane3) {
@@ -1399,7 +1409,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       ++tmpVec1.z();
       fcoords->push_back(tmpVec1);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Plane 4:
     if (nearPlane4) {
@@ -1407,7 +1417,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       --tmpVec1.x();
       fcoords->push_back(tmpVec1);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Plane 5:
     if (nearPlane5) {
@@ -1415,7 +1425,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       --tmpVec1.y();
       fcoords->push_back(tmpVec1);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
     // Plane 6:
     if (nearPlane6) {
@@ -1423,8 +1433,21 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
       --tmpVec1.z();
       fcoords->push_back(tmpVec1);
       types->push_back(curType);
-      continue;
+      goto duplicatedAtoms;
     }
+   
+    // Once an atom has been matched, it's duplicates should not
+    // be matched either.
+    // at position [0], i gives the rx1 index of the atom that was duplicated
+    // at position [1], startingIndex gives the starting rx1 index of duplicates
+    // at position [2], endingIndex gives the ending rx1 index of the duplicates
+    duplicatedAtoms:
+      unsigned int endingIndex = fcoords->size() - 1;
+      XcVector duplicatedAtoms;
+      duplicatedAtoms[0] = i;
+      duplicatedAtoms[1] = startingIndex;
+      duplicatedAtoms[2] = endingIndex;
+      duplicatedAtomsVector->push_back(duplicatedAtoms);
   }
 }
 
@@ -1451,6 +1474,14 @@ bool XtalComp::compareCurrent()
   bool rx2AtomMatched;
   XcVector rx2_xformedCoord;
   XcVector diffVec;
+
+  // If an rx1 atom has already been matched, it can't be matched again! PSA
+  std::vector<bool> rx1AtomAlreadyMatched;
+  rx1AtomAlreadyMatched.clear();
+  rx1AtomAlreadyMatched.reserve(rx1_types.size());
+  for (int i = 0; i < rx1_types.size(); i++) {
+    rx1AtomAlreadyMatched[i] = false;
+  } 
 
   // Iterate through all atoms in rx2
   for (size_t rx2Ind = 0; rx2Ind < rx2_types.size(); ++rx2Ind) {
@@ -1490,6 +1521,13 @@ bool XtalComp::compareCurrent()
         continue;
       }
 
+      if (rx1AtomAlreadyMatched[rx1Ind] == true) {
+#ifdef XTALCOMP_DEBUG
+    DEBUG_STRING("Already matched!");
+#endif
+        continue;
+      }
+
       // If the coordinates don't match, move to the next rx2 atom
       const XcVector &rx1_ccoord = rx1_ccoords[rx1Ind];
 #ifdef XTALCOMP_DEBUG
@@ -1508,6 +1546,31 @@ bool XtalComp::compareCurrent()
 
       // Otherwise, the atoms match. move to next atom
       rx2AtomMatched = true;
+      rx1AtomAlreadyMatched[rx1Ind] = true;
+#ifdef XTALCOMP_DEBUG
+      std::cout << "m_duplicatedAtomsVector.size() == " <<
+        m_duplicatedAtomsVector.size() << std::endl;
+#endif
+      // Check for other duplicates to add to rx1AtomAlreadyMatched
+      // m_duplicatedAtomsVector[i][0] is 
+      for (int i = 0; i < m_duplicatedAtomsVector.size(); i++) {
+        if ((m_duplicatedAtomsVector[i][0] == rx1Ind) ||
+             (m_duplicatedAtomsVector[i][1] <= rx1Ind && rx1Ind <=
+              m_duplicatedAtomsVector[i][2])) {
+          for (int j = m_duplicatedAtomsVector[i][1]; 
+                j <= m_duplicatedAtomsVector[i][2]; j++) {
+            rx1AtomAlreadyMatched[j] = true;
+#ifdef XTALCOMP_DEBUG
+      std::cout << "rx1AtomAlreadyMatched at rx1Ind "<<j<<" = true now\n";
+#endif       
+          }
+          rx1AtomAlreadyMatched[m_duplicatedAtomsVector[i][0]] = true;
+#ifdef XTALCOMP_DEBUG
+      std::cout << "rx1AtomAlreadyMatched at rx1Ind "
+      <<int(m_duplicatedAtomsVector[i][0])<< "== true now as well\n";
+#endif
+        }
+      } 
       break;
     }
     // If the current rx1Atom was not matched, fail:
