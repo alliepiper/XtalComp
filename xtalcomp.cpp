@@ -1582,10 +1582,6 @@ bool XtalComp::compareCurrent()
       // Otherwise, the atoms match. move to next atom
       rx2AtomMatched = true;
       rx1AtomAlreadyMatched[rx1Ind] = true;
-#ifdef XTALCOMP_DEBUG
-      std::cout << "m_duplicatedAtomsVector.size() == " <<
-        m_duplicatedAtomsVector.size() << std::endl;
-#endif
       // Check for other duplicates to add to rx1AtomAlreadyMatched
       for (DuplicateMap::const_iterator it = m_duplicatedAtoms.begin(),
            itEnd = m_duplicatedAtoms.end(); it != itEnd; ++it) {
