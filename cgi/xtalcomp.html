@@ -39,6 +39,12 @@ Angular tolerance for lattice comparisons (default = 0.25 degrees):
     order of the atom type counts (line 6) must be the same in each
     POSCAR.
   </li>
+  <li>
+    <b>Update</b>: you may now compare different crystals with different formula
+    units (e. g. Ti1O2 and Ti2O4). The crystals will be reduced to their
+    primitive form using functions from spglib before the comparison.
+    However, the order of atoms <b>must</b> still match.
+  </li>
 </ul>
 
 <h2>About:</h2>

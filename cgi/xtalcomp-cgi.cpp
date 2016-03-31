@@ -137,9 +137,16 @@ char **getcgivars() {
 
 #include "../xtalcomp.h"
 
+#include <cassert>
 #include <iostream>
 #include <sstream>
 #include <string>
+
+extern "C" {
+#include "../spglib/spglib.h"
+}
+
+using namespace std;
 
 #define PRINT_DIV \
   printf("|-------------------------------------|-------------------------------------|\n")
@@ -147,6 +154,13 @@ char **getcgivars() {
 bool parsePOSCAR(char *, XcMatrix&, std::vector<XcVector>&, std::vector<unsigned int>&);
 
 std::string debug;
+
+uint reduceToPrimitive(vector<XcVector>& fcoords,
+                       vector<uint>& atomicNums,
+                       XcMatrix& cellMatrix,
+                       const double cartTol);
+
+void printErrorMessage(string msg);
 
 // XtalComp CGI wrapper:
 int main() {
@@ -190,16 +204,26 @@ int main() {
   }
 
   if (!validInput) {
-    printf("Content-type: text/html\n\n");
-    printf("<html>\n");
-    printf("<head><title>XtalComp Results</title></head>\n");
-    printf("<body>\n");
-    printf("<h1>Invalid input</h1>\n");
-    printf("Go back and check your inputs.\n");
-    printf("<br>");
-    //printf(debug.c_str());
-    printf("</body>\n");
-    printf("</html>\n");
+    printErrorMessage("Invalid input: Go back and check your inputs.");
+    return 1;
+  }
+
+  uint numAtoms1 = types1.size();
+  uint numAtoms2 = types2.size();
+
+  uint spg1 = reduceToPrimitive(pos1, types1, cell1, cartTol);
+  uint spg2 = reduceToPrimitive(pos2, types2, cell2, cartTol);
+
+  bool cellReduced1 = false, cellReduced2 = false;
+  if (numAtoms1 != types1.size()) cellReduced1 = true;
+  if (numAtoms2 != types2.size()) cellReduced2 = true;
+
+  if (spg1 < 1 || spg1 > 230) {
+    printErrorMessage("An invalid spg was detected by spglib for cell 1");
+    return 1;
+  }
+  if (spg2 < 1 || spg2 > 230) {
+    printErrorMessage("An invalid spg was detected by spglib for cell 2");
     return 1;
   }
 
@@ -237,6 +261,13 @@ int main() {
     }
 
   printf("<h1>Input structures:</h1>\n") ;
+  printf("NOTE: The inputs may look a little different since %s",
+         "they were modified by spglib functions<br>\n");
+  if (cellReduced1)
+    printf("NOTE: A primitive reduction was performed on cell 1<br>\n");
+  if (cellReduced2)
+    printf("NOTE: A primitive reduction was performed on cell 2<br>\n");
+
   printf("<font face=\"Courier New, Courier, monospace\">\n");
   printf("<pre>\n");
   PRINT_DIV;
@@ -289,6 +320,17 @@ void Debug(const char *str, const double d)
 }
 void Debug(const std::string &str, const double d) {Debug(str.c_str(), d);}
 
+// A simple function that checks to see if a string only contains ints
+// and spaces
+inline bool containsOnlyIntsAndSpaces(const std::string& s)
+{
+  for (size_t i = 0; i < s.size(); i++) {
+    // If it's not a digit, a space, or a return, return false
+    if (!isdigit(s.at(i)) && s.at(i) != ' ' && s.at(i) != '\r') return false;
+  }
+  return true;
+}
+
 bool parsePOSCAR(char *str, XcMatrix &cell,
                  std::vector<XcVector> &pos,
                  std::vector<unsigned int> &types)
@@ -333,9 +375,15 @@ bool parsePOSCAR(char *str, XcMatrix &cell,
   // Store frac->cart matrix
   XcMatrix toCart = cell.transpose().inverse();
 
+  // Sometimes, atomic symbols go here.
+  // If we have something here that is not an int, ignore it and move to the
+  // next line.
+  getline(lines, line);
+  // If it isn't the atom types line, move on to the next line
+  if (!containsOnlyIntsAndSpaces(line)) getline(lines, line);
+
   // List of atom types
   std::vector<int> counts (15); // Allow up to 15 atom types.
-  getline(lines, line);
   int tmpint;
   int numTypes = sscanf(line.c_str(), "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
                         &counts[0], &counts[1], &counts[2],
@@ -402,4 +450,129 @@ bool parsePOSCAR(char *str, XcMatrix &cell,
   Debug("pos size: ", pos.size());
   Debug("types size: ", types.size());
   return true;
+}
+
+uint reduceToPrimitive(vector<XcVector>& fcoords,
+                       vector<uint>& atomicNums,
+                       XcMatrix& cellMatrix,
+                       const double cartTol)
+{
+  assert(fcoords.size() == atomicNums.size());
+
+  const int numAtoms = fcoords.size();
+
+  if (numAtoms < 1) {
+    cerr << "Cannot determine spacegroup of empty cell.\n";
+    return 0;
+  }
+
+  // Spglib expects column vecs, so fill with transpose
+  double lattice[3][3] = {
+    {cellMatrix(0,0), cellMatrix(1,0), cellMatrix(2,0)},
+    {cellMatrix(0,1), cellMatrix(1,1), cellMatrix(2,1)},
+    {cellMatrix(0,2), cellMatrix(1,2), cellMatrix(2,2)}
+  };
+
+  // Build position list. Include space for 4*numAtoms for the
+  // cell refinement
+  double (*positions)[3] = new double[4*numAtoms][3];
+  int *types = new int[4*numAtoms];
+  XcVector fracCoord;
+  for (int i = 0; i < numAtoms; ++i) {
+    fracCoord         = fcoords.at(i);
+    types[i]          = atomicNums.at(i);
+    positions[i][0]   = fracCoord[0];
+    positions[i][1]   = fracCoord[1];
+    positions[i][2]   = fracCoord[2];
+  }
+
+  // find spacegroup for return value
+  char symbol[21];
+  int spg = spg_get_international(symbol,
+                                  lattice,
+                                  positions,
+                                  types,
+                                  numAtoms,
+                                  cartTol);
+
+  // Refine the structure
+  int numBravaisAtoms =
+    spg_refine_cell(lattice, positions, types,
+                    numAtoms, cartTol);
+
+  // if spglib cannot refine the cell, return 0.
+  if (numBravaisAtoms <= 0) {
+    return 0;
+  }
+
+  // Find primitive cell. This updates lattice, positions, types
+  // to primitive
+  int numPrimitiveAtoms =
+    spg_find_primitive(lattice, positions, types,
+                       numBravaisAtoms, cartTol);
+
+  // If the cell was already a primitive cell, reset
+  // numPrimitiveAtoms.
+  if (numPrimitiveAtoms == 0) {
+    numPrimitiveAtoms = numBravaisAtoms;
+  }
+
+  // Bail if everything failed
+  if (numPrimitiveAtoms <= 0) {
+    return 0;
+  }
+
+  // Update passed objects
+  // convert col vecs to row vecs
+  cellMatrix(0, 0) =  lattice[0][0];
+  cellMatrix(0, 1) =  lattice[1][0];
+  cellMatrix(0, 2) =  lattice[2][0];
+  cellMatrix(1, 0) =  lattice[0][1];
+  cellMatrix(1, 1) =  lattice[1][1];
+  cellMatrix(1, 2) =  lattice[2][1];
+  cellMatrix(2, 0) =  lattice[0][2];
+  cellMatrix(2, 1) =  lattice[1][2];
+  cellMatrix(2, 2) =  lattice[2][2];
+
+  // Trim
+  while (fcoords.size() > numPrimitiveAtoms) {
+    fcoords.pop_back();
+    atomicNums.pop_back();
+  }
+  while (fcoords.size() < numPrimitiveAtoms) {
+    fcoords.push_back(XcVector());
+    atomicNums.push_back(0);
+  }
+
+  // Update
+  assert(fcoords.size() == atomicNums.size());
+  assert(fcoords.size() == numPrimitiveAtoms);
+  for (int i = 0; i < numPrimitiveAtoms; ++i) {
+    atomicNums[i]  = types[i];
+    fcoords[i] = XcVector(positions[i][0], positions[i][1], positions[i][2]);
+  }
+
+  delete [] positions;
+  delete [] types;
+
+  if (spg > 230 || spg < 0) {
+    spg = 0;
+  }
+
+  return static_cast<unsigned int>(spg);
+}
+
+
+void printErrorMessage(string msg)
+{
+  printf("Content-type: text/html\n\n");
+  printf("<html>\n");
+  printf("<head><title>XtalComp Results</title></head>\n");
+  printf("<body>\n");
+  printf("<h1>Error</h1>\n");
+  printf("%s\n", msg.c_str());
+  printf("<br>");
+  //printf(debug.c_str());
+  printf("</body>\n");
+  printf("</html>\n");
 }
