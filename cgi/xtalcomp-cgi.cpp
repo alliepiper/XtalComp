@@ -137,14 +137,9 @@ char **getcgivars() {
 
 #include "../xtalcomp.h"
 
-#include <cassert>
 #include <iostream>
 #include <sstream>
 #include <string>
-
-extern "C" {
-#include "../spglib/spglib.h"
-}
 
 using namespace std;
 
@@ -154,11 +149,6 @@ using namespace std;
 bool parsePOSCAR(char *, XcMatrix&, std::vector<XcVector>&, std::vector<unsigned int>&);
 
 std::string debug;
-
-uint reduceToPrimitive(vector<XcVector>& fcoords,
-                       vector<uint>& atomicNums,
-                       XcMatrix& cellMatrix,
-                       const double cartTol);
 
 void printErrorMessage(string msg);
 
@@ -208,25 +198,6 @@ int main() {
     return 1;
   }
 
-  uint numAtoms1 = types1.size();
-  uint numAtoms2 = types2.size();
-
-  uint spg1 = reduceToPrimitive(pos1, types1, cell1, cartTol);
-  uint spg2 = reduceToPrimitive(pos2, types2, cell2, cartTol);
-
-  bool cellReduced1 = false, cellReduced2 = false;
-  if (numAtoms1 != types1.size()) cellReduced1 = true;
-  if (numAtoms2 != types2.size()) cellReduced2 = true;
-
-  if (spg1 < 1 || spg1 > 230) {
-    printErrorMessage("An invalid spg was detected by spglib for cell 1");
-    return 1;
-  }
-  if (spg2 < 1 || spg2 > 230) {
-    printErrorMessage("An invalid spg was detected by spglib for cell 2");
-    return 1;
-  }
-
   bool match = XtalComp::compare(cell1, types1, pos1,
                                  cell2, types2, pos2,
                                  transform, cartTol, angleTol);
@@ -241,6 +212,10 @@ int main() {
          cartTol, angleTol);
   printf("The structures %s match!<br>\n", (match) ? "DO" : "do NOT");
   if (match) { // Print transform
+
+    printf("NOTE: The crystals may have been reduced to their primitive form %s",
+           "by spglib functions before this transform was applied<br>\n");
+
     printf("<font face=\"Courier New, Courier, monospace\">\n");
     printf("<pre>\n");
     printf("<h2>Transformation matrix:</h2>\n");
@@ -261,12 +236,6 @@ int main() {
     }
 
   printf("<h1>Input structures:</h1>\n") ;
-  printf("NOTE: The inputs may look a little different since %s",
-         "they were modified by spglib functions<br>\n");
-  if (cellReduced1)
-    printf("NOTE: A primitive reduction was performed on cell 1<br>\n");
-  if (cellReduced2)
-    printf("NOTE: A primitive reduction was performed on cell 2<br>\n");
 
   printf("<font face=\"Courier New, Courier, monospace\">\n");
   printf("<pre>\n");
@@ -451,117 +420,6 @@ bool parsePOSCAR(char *str, XcMatrix &cell,
   Debug("types size: ", types.size());
   return true;
 }
-
-uint reduceToPrimitive(vector<XcVector>& fcoords,
-                       vector<uint>& atomicNums,
-                       XcMatrix& cellMatrix,
-                       const double cartTol)
-{
-  assert(fcoords.size() == atomicNums.size());
-
-  const int numAtoms = fcoords.size();
-
-  if (numAtoms < 1) {
-    cerr << "Cannot determine spacegroup of empty cell.\n";
-    return 0;
-  }
-
-  // Spglib expects column vecs, so fill with transpose
-  double lattice[3][3] = {
-    {cellMatrix(0,0), cellMatrix(1,0), cellMatrix(2,0)},
-    {cellMatrix(0,1), cellMatrix(1,1), cellMatrix(2,1)},
-    {cellMatrix(0,2), cellMatrix(1,2), cellMatrix(2,2)}
-  };
-
-  // Build position list. Include space for 4*numAtoms for the
-  // cell refinement
-  double (*positions)[3] = new double[4*numAtoms][3];
-  int *types = new int[4*numAtoms];
-  XcVector fracCoord;
-  for (int i = 0; i < numAtoms; ++i) {
-    fracCoord         = fcoords.at(i);
-    types[i]          = atomicNums.at(i);
-    positions[i][0]   = fracCoord[0];
-    positions[i][1]   = fracCoord[1];
-    positions[i][2]   = fracCoord[2];
-  }
-
-  // find spacegroup for return value
-  char symbol[21];
-  int spg = spg_get_international(symbol,
-                                  lattice,
-                                  positions,
-                                  types,
-                                  numAtoms,
-                                  cartTol);
-
-  // Refine the structure
-  int numBravaisAtoms =
-    spg_refine_cell(lattice, positions, types,
-                    numAtoms, cartTol);
-
-  // if spglib cannot refine the cell, return 0.
-  if (numBravaisAtoms <= 0) {
-    return 0;
-  }
-
-  // Find primitive cell. This updates lattice, positions, types
-  // to primitive
-  int numPrimitiveAtoms =
-    spg_find_primitive(lattice, positions, types,
-                       numBravaisAtoms, cartTol);
-
-  // If the cell was already a primitive cell, reset
-  // numPrimitiveAtoms.
-  if (numPrimitiveAtoms == 0) {
-    numPrimitiveAtoms = numBravaisAtoms;
-  }
-
-  // Bail if everything failed
-  if (numPrimitiveAtoms <= 0) {
-    return 0;
-  }
-
-  // Update passed objects
-  // convert col vecs to row vecs
-  cellMatrix(0, 0) =  lattice[0][0];
-  cellMatrix(0, 1) =  lattice[1][0];
-  cellMatrix(0, 2) =  lattice[2][0];
-  cellMatrix(1, 0) =  lattice[0][1];
-  cellMatrix(1, 1) =  lattice[1][1];
-  cellMatrix(1, 2) =  lattice[2][1];
-  cellMatrix(2, 0) =  lattice[0][2];
-  cellMatrix(2, 1) =  lattice[1][2];
-  cellMatrix(2, 2) =  lattice[2][2];
-
-  // Trim
-  while (fcoords.size() > numPrimitiveAtoms) {
-    fcoords.pop_back();
-    atomicNums.pop_back();
-  }
-  while (fcoords.size() < numPrimitiveAtoms) {
-    fcoords.push_back(XcVector());
-    atomicNums.push_back(0);
-  }
-
-  // Update
-  assert(fcoords.size() == atomicNums.size());
-  assert(fcoords.size() == numPrimitiveAtoms);
-  for (int i = 0; i < numPrimitiveAtoms; ++i) {
-    atomicNums[i]  = types[i];
-    fcoords[i] = XcVector(positions[i][0], positions[i][1], positions[i][2]);
-  }
-
-  delete [] positions;
-  delete [] types;
-
-  if (spg > 230 || spg < 0) {
-    spg = 0;
-  }
-
-  return static_cast<unsigned int>(spg);
-}
-
 
 void printErrorMessage(string msg)
 {

@@ -58,6 +58,9 @@ class XtalComp
    * @param cartTol Tolerance for atomic position comparisons in cartesian units
    * @params angleTol Used for matching candidate sublattices -- default of
    * 0.25 degrees should be sufficient.
+   * @param reduceXtalToPrimitive Whether or not to reduce the crystals to
+   * their primitive cells before comparing them. This uses the space group
+   * library (spglib) -- default is true.
    *
    * @return True if structures match, false otherwise
    */
@@ -69,7 +72,8 @@ class XtalComp
                       const std::vector<XcVector> &positions2,
                       float transform[16] = 0,
                       const double cartTol = 0.05,
-                      const double angleTol = 0.25);
+                      const double angleTol = 0.25,
+                      const bool reduceXtalToPrimitive = true);
 
   virtual ~XtalComp();
 
@@ -98,6 +102,13 @@ class XtalComp
 
   // Make next comparison
   bool compareCurrent();
+
+  // Reduce the xtal to its primitive form
+  // Returns the space group
+  static unsigned int reduceToPrimitive(std::vector<XcVector>& fcoords,
+                                        std::vector<unsigned int>& atomicNums,
+                                        XcMatrix& cellMatrix,
+                                        const double cartTol);
 
   // Tolerance
   double m_lengthtol;
