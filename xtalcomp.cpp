@@ -17,6 +17,10 @@
 
 #include "stablecomparison.h"
 
+extern "C" {
+#include "spglib/spglib.h"
+}
+
 #include <algorithm>
 #include <assert.h>
 #include <iostream>
@@ -194,17 +198,53 @@ public:
   }
 };
 
-bool XtalComp::compare(const XcMatrix &cellMatrix1,
-                       const std::vector<unsigned int> &types1,
-                       const std::vector<XcVector> &positions1,
-                       const XcMatrix &cellMatrix2,
-                       const std::vector<unsigned int> &types2,
-                       const std::vector<XcVector> &positions2,
+bool XtalComp::compare(const XcMatrix &_cellMatrix1,
+                       const std::vector<unsigned int> &_types1,
+                       const std::vector<XcVector> &_positions1,
+                       const XcMatrix &_cellMatrix2,
+                       const std::vector<unsigned int> &_types2,
+                       const std::vector<XcVector> &_positions2,
                        float transform[16],
                        const double cartTol,
-                       const double angleTol)
+                       const double angleTol,
+                       const bool reduceXtalsToPrimitive)
 {
-  // First check that types and positions are of the same size
+  // Make a non-const copy of these variables so we may edit them if
+  // reduceToPrimitive is true
+  XcMatrix cellMatrix1 = _cellMatrix1;
+  std::vector<unsigned int> types1 = _types1;
+  std::vector<XcVector> positions1 = _positions1;
+  XcMatrix cellMatrix2 = _cellMatrix2;
+  std::vector<unsigned int> types2 = _types2;
+  std::vector<XcVector> positions2 = _positions2;
+
+  // First, reduce the xtals to their primitive form if needed
+  if (reduceXtalsToPrimitive) {
+    // Perhaps we'll use these later
+    //unsigned int numAtoms1 = types1.size();
+    //unsigned int numAtoms2 = types2.size();
+
+    // We'll use the same cartesian tolerance for the spglib calls, too
+    unsigned int spg1 = reduceToPrimitive(positions1, types1,
+                                          cellMatrix1, cartTol);
+    unsigned int spg2 = reduceToPrimitive(positions2, types2,
+                                          cellMatrix2, cartTol);
+
+    // bool cellReduced1 = false, cellReduced2 = false;
+    //if (numAtoms1 != types1.size()) cellReduced1 = true;
+    //if (numAtoms2 != types2.size()) cellReduced2 = true;
+
+    if (spg1 < 1 || spg1 > 230) {
+      std::cerr << "An invalid spg was detected by spglib for cell 1\n";
+      return false;
+    }
+    if (spg2 < 1 || spg2 > 230) {
+      std::cerr << "An invalid spg was detected by spglib for cell 2\n";
+      return false;
+    }
+  }
+
+  // Next, check that types and positions are of the same size
   if (types1.size() != positions1.size() ||
       types2.size() != positions2.size() ){
     fprintf(stderr, "XtalComp::compare was given a structure description with"
@@ -1625,6 +1665,116 @@ bool XtalComp::compareCurrent()
   return true;
 }
 
+unsigned int XtalComp::reduceToPrimitive(std::vector<XcVector>& fcoords,
+                                         std::vector<unsigned int>& atomicNums,
+                                         XcMatrix& cellMatrix,
+                                         const double cartTol)
+{
+  assert(fcoords.size() == atomicNums.size());
+
+  const int numAtoms = fcoords.size();
+
+  if (numAtoms < 1) {
+    fprintf(stderr, "Cannot determine spacegroup of empty cell.\n");
+    return 0;
+  }
+
+  // Spglib expects column vecs, so fill with transpose
+  double lattice[3][3] = {
+    {cellMatrix(0,0), cellMatrix(1,0), cellMatrix(2,0)},
+    {cellMatrix(0,1), cellMatrix(1,1), cellMatrix(2,1)},
+    {cellMatrix(0,2), cellMatrix(1,2), cellMatrix(2,2)}
+  };
+
+  // Build position list. Include space for 4*numAtoms for the
+  // cell refinement
+  double (*positions)[3] = new double[4*numAtoms][3];
+  int *types = new int[4*numAtoms];
+  XcVector fracCoord;
+  for (int i = 0; i < numAtoms; ++i) {
+    fracCoord         = fcoords.at(i);
+    types[i]          = atomicNums.at(i);
+    positions[i][0]   = fracCoord[0];
+    positions[i][1]   = fracCoord[1];
+    positions[i][2]   = fracCoord[2];
+  }
+
+  // find spacegroup for return value
+  char symbol[21];
+  int spg = spg_get_international(symbol,
+                                  lattice,
+                                  positions,
+                                  types,
+                                  numAtoms,
+                                  cartTol);
+
+  // Refine the structure
+  int numBravaisAtoms =
+    spg_refine_cell(lattice, positions, types,
+                    numAtoms, cartTol);
+
+  // if spglib cannot refine the cell, return 0.
+  if (numBravaisAtoms <= 0) {
+    return 0;
+  }
+
+  // Find primitive cell. This updates lattice, positions, types
+  // to primitive
+  int numPrimitiveAtoms =
+    spg_find_primitive(lattice, positions, types,
+                       numBravaisAtoms, cartTol);
+
+  // If the cell was already a primitive cell, reset
+  // numPrimitiveAtoms.
+  if (numPrimitiveAtoms == 0) {
+    numPrimitiveAtoms = numBravaisAtoms;
+  }
+
+  // Bail if everything failed
+  if (numPrimitiveAtoms <= 0) {
+    return 0;
+  }
+
+  // Update passed objects
+  // convert col vecs to row vecs
+  cellMatrix(0, 0) =  lattice[0][0];
+  cellMatrix(0, 1) =  lattice[1][0];
+  cellMatrix(0, 2) =  lattice[2][0];
+  cellMatrix(1, 0) =  lattice[0][1];
+  cellMatrix(1, 1) =  lattice[1][1];
+  cellMatrix(1, 2) =  lattice[2][1];
+  cellMatrix(2, 0) =  lattice[0][2];
+  cellMatrix(2, 1) =  lattice[1][2];
+  cellMatrix(2, 2) =  lattice[2][2];
+
+  // Trim
+  while (fcoords.size() > numPrimitiveAtoms) {
+    fcoords.pop_back();
+    atomicNums.pop_back();
+  }
+  while (fcoords.size() < numPrimitiveAtoms) {
+    fcoords.push_back(XcVector());
+    atomicNums.push_back(0);
+  }
+
+  // Update
+  assert(fcoords.size() == atomicNums.size());
+  assert(fcoords.size() == numPrimitiveAtoms);
+  for (int i = 0; i < numPrimitiveAtoms; ++i) {
+    atomicNums[i]  = types[i];
+    fcoords[i] = XcVector(positions[i][0], positions[i][1], positions[i][2]);
+  }
+
+  delete [] positions;
+  delete [] types;
+
+  if (spg > 230 || spg < 0) {
+    spg = 0;
+  }
+
+  return static_cast<unsigned int>(spg);
+}
+
 //
 // Niggli reduction implementation. See:
 //
@@ -2043,3 +2193,4 @@ bool XtalComp::ReducedXtal::isNiggliReduced() const
   // all good!
   return true;
 }
+

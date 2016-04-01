@@ -4,6 +4,8 @@ project (XtalComp)
 add_library (XtalComp xtalcomp.cpp xctransform.cpp xcvector.h xcmatrix.h
   stablecomparison.h)
 
+target_link_libraries(XtalComp spglib)
+
 add_subdirectory(spglib)
 
 option( BUILD_CGI
@@ -11,7 +13,7 @@ option( BUILD_CGI
        OFF )
 if(BUILD_CGI)
   add_executable (xtalcomp.cgi cgi/xtalcomp-cgi.cpp)
-  target_link_libraries (xtalcomp.cgi XtalComp spglib)
+  target_link_libraries (xtalcomp.cgi XtalComp)
 endif(BUILD_CGI)
 
 add_executable (test test.cpp)
