@@ -1,10 +1,40 @@
-/* pointgroup.c */
 /* Copyright (C) 2008 Atsushi Togo */
+/* All rights reserved. */
+
+/* This file is part of spglib. */
+
+/* Redistribution and use in source and binary forms, with or without */
+/* modification, are permitted provided that the following conditions */
+/* are met: */
+
+/* * Redistributions of source code must retain the above copyright */
+/*   notice, this list of conditions and the following disclaimer. */
+
+/* * Redistributions in binary form must reproduce the above copyright */
+/*   notice, this list of conditions and the following disclaimer in */
+/*   the documentation and/or other materials provided with the */
+/*   distribution. */
+
+/* * Neither the name of the phonopy project nor the names of its */
+/*   contributors may be used to endorse or promote products derived */
+/*   from this software without specific prior written permission. */
+
+/* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS */
+/* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT */
+/* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS */
+/* FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE */
+/* COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, */
+/* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, */
+/* BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; */
+/* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER */
+/* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT */
+/* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN */
+/* ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE */
+/* POSSIBILITY OF SUCH DAMAGE. */
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "lattice.h"
 #include "pointgroup.h"
 #include "symmetry.h"
 #include "mathfunc.h"
@@ -345,8 +375,6 @@ static int rot_axes[][3] = {
 
 static int get_pointgroup_number_by_rotations(SPGCONST int rotations[][3][3],
 					      const int num_rotations);
-static PointSymmetry get_pointsymmetry(SPGCONST int rotations[][3][3],
-				       const int num_rotations);
 static int get_pointgroup_number(SPGCONST PointSymmetry * pointsym);
 static int get_pointgroup_class_table(int table[10],
 				      SPGCONST PointSymmetry * pointsym);
@@ -358,7 +386,7 @@ static int get_orthogonal_axis(int ortho_axes[],
 static int laue2m(int axes[3],
 		  SPGCONST PointSymmetry * pointsym);
 
-#ifdef DEBUG
+#ifdef SPGDEBUG
 static int lauemmm(int axes[3],
 		   SPGCONST PointSymmetry * pointsym);
 static int laue4m(int axes[3],
@@ -389,7 +417,7 @@ static void set_transformation_matrix(int tmat[3][3],
 static int is_exist_axis(const int axis_vec[3], const int axis_index);
 static void sort_axes(int axes[3]);
 
-
+/* Retrun pointgroup.number = 0 if failed */
 Pointgroup ptg_get_transformation_matrix(int transform_mat[3][3],
 					 SPGCONST int rotations[][3][3],
 					 const int num_rotations)
@@ -411,13 +439,12 @@ Pointgroup ptg_get_transformation_matrix(int transform_mat[3][3],
   
   if (pg_num > 0) {
     pointgroup = ptg_get_pointgroup(pg_num);
-    pointsym = get_pointsymmetry(rotations, num_rotations);
+    pointsym = ptg_get_pointsymmetry(rotations, num_rotations);
     get_axes(axes, pointgroup.laue, &pointsym);
     set_transformation_matrix(transform_mat, axes);
-  }
-
-  debug_print("transformation matrix:\n");
-  debug_print_matrix_i3(tmp_transform_mat);
+  } else {
+    pointgroup = ptg_get_pointgroup(0);
+  }    
 
   return pointgroup;
 }
@@ -431,8 +458,12 @@ Pointgroup ptg_get_pointgroup(const int pointgroup_number)
   pointgroup.number = pointgroup_number;
   pointgroup_type = pointgroup_data[pointgroup_number];
   strcpy(pointgroup.symbol, pointgroup_type.symbol);
+  strcpy(pointgroup.schoenflies, pointgroup_type.schoenflies);
   for (i = 0; i < 5; i++) {
     if (pointgroup.symbol[i] == ' ') {pointgroup.symbol[i] = '\0';}
+  }
+  for (i = 0; i < 3; i++) {
+    if (pointgroup.schoenflies[i] == ' ') {pointgroup.schoenflies[i] = '\0';}
   }
   pointgroup.holohedry = pointgroup_type.holohedry;
   pointgroup.laue = pointgroup_type.laue;
@@ -442,17 +473,8 @@ Pointgroup ptg_get_pointgroup(const int pointgroup_number)
   return pointgroup;
 }
 
-static int get_pointgroup_number_by_rotations(SPGCONST int rotations[][3][3],
-					      const int num_rotations)
-{
-  PointSymmetry pointsym;
-
-  pointsym = get_pointsymmetry(rotations, num_rotations);
-  return get_pointgroup_number(&pointsym);
-}
-
-static PointSymmetry get_pointsymmetry(SPGCONST int rotations[][3][3],
-				       const int num_rotations)
+PointSymmetry ptg_get_pointsymmetry(SPGCONST int rotations[][3][3],
+				    const int num_rotations)
 {
   int i, j;
   PointSymmetry pointsym;
@@ -471,6 +493,15 @@ static PointSymmetry get_pointsymmetry(SPGCONST int rotations[][3][3],
   }
 
   return pointsym;
+}
+
+static int get_pointgroup_number_by_rotations(SPGCONST int rotations[][3][3],
+					      const int num_rotations)
+{
+  PointSymmetry pointsym;
+
+  pointsym = ptg_get_pointsymmetry(rotations, num_rotations);
+  return get_pointgroup_number(&pointsym);
 }
 
 static int get_pointgroup_number(SPGCONST PointSymmetry * pointsym)
@@ -705,11 +736,11 @@ static int laue2m(int axes[3],
   return 0;
 }
 
-#ifdef DEBUG
+#ifdef SPGDEBUG
 static int lauemmm(int axes[3],
 		   SPGCONST PointSymmetry * pointsym)
 {
-  int i, count, axis, tmpval;
+  int i, count, axis;
   int prop_rot[3][3];
 
 
@@ -994,7 +1025,7 @@ static int laue3m(int axes[3],
 static int lauem3m(int axes[3],
 		   SPGCONST PointSymmetry * pointsym)
 {
-  int i, count, axis, tmpval;
+  int i, count, axis;
   int prop_rot[3][3];
 
   for (i = 0; i < 3; i++) { axes[i] = -1; }
@@ -1118,7 +1149,10 @@ static int lauennn(int axes[3],
   int i, count, axis;
   int prop_rot[3][3];
 
-  for (i = 0; i < 3; i++) { axes[i] = -1; }
+  for (i = 0; i < 3; i++) {
+    axes[i] = -1;
+  }
+
   count = 0;
   for (i = 0; i < pointsym->size; i++) {
     get_proper_rotation(prop_rot, pointsym->rot[i]);
@@ -1163,7 +1197,7 @@ static int get_rotation_axis(SPGCONST int proper_rot[3][3])
   }
   
  end:
-#ifdef DEBUG
+#ifdef SPGDEBUG
   if (axis == -1) {
     printf("rotation axis cound not found.\n");
   }

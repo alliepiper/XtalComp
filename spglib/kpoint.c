@@ -1,12 +1,53 @@
-/* kpoint.c */
 /* Copyright (C) 2008 Atsushi Togo */
+/* All rights reserved. */
+
+/* This file is part of spglib. */
+
+/* Redistribution and use in source and binary forms, with or without */
+/* modification, are permitted provided that the following conditions */
+/* are met: */
+
+/* * Redistributions of source code must retain the above copyright */
+/*   notice, this list of conditions and the following disclaimer. */
+
+/* * Redistributions in binary form must reproduce the above copyright */
+/*   notice, this list of conditions and the following disclaimer in */
+/*   the documentation and/or other materials provided with the */
+/*   distribution. */
+
+/* * Neither the name of the phonopy project nor the names of its */
+/*   contributors may be used to endorse or promote products derived */
+/*   from this software without specific prior written permission. */
+
+/* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS */
+/* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT */
+/* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS */
+/* FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE */
+/* COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, */
+/* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, */
+/* BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; */
+/* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER */
+/* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT */
+/* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN */
+/* ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE */
+/* POSSIBILITY OF SUCH DAMAGE. */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include "mathfunc.h"
 #include "kpoint.h"
+#include "kgrid.h"
 
-const int kpt_bz_search_space[KPT_NUM_BZ_SEARCH_SPACE][3] = {
+#ifdef KPTWARNING
+#include <stdio.h>
+#define warning_print(...) fprintf(stderr,__VA_ARGS__)
+#else
+#define warning_print(...)
+#endif
+
+#define KPT_NUM_BZ_SEARCH_SPACE 125
+
+static int bz_search_space[KPT_NUM_BZ_SEARCH_SPACE][3] = {
   { 0,  0,  0},
   { 0,  0,  1},
   { 0,  0,  2},
@@ -145,12 +186,17 @@ static int get_ir_reciprocal_mesh(int grid_address[][3],
 				  const int mesh[3],
 				  const int is_shift[3],
 				  const MatINT * rot_reciprocal);
-static int
-get_ir_reciprocal_mesh_openmp(int grid_address[][3],
-			      int map[],
-			      const int mesh[3],
-			      const int is_shift[3],
-			      const MatINT* rot_reciprocal);
+static int get_ir_reciprocal_mesh_normal(int grid_address[][3],
+                                         int ir_mapping_table[],
+                                         const int mesh[3],
+                                         const int is_shift[3],
+                                         const MatINT *rot_reciprocal);
+static int get_ir_reciprocal_mesh_distortion(int grid_address[][3],
+                                             int ir_mapping_table[],
+                                             const int mesh[3],
+                                             const int is_shift[3],
+                                             const MatINT *rot_reciprocal);
+static int get_num_ir(int ir_mapping_table[], const int mesh[3]);
 static int relocate_BZ_grid_address(int bz_grid_address[][3],
 				    int bz_map[],
 				    SPGCONST int grid_address[][3],
@@ -159,19 +205,8 @@ static int relocate_BZ_grid_address(int bz_grid_address[][3],
 				    const int is_shift[3]);
 static double get_tolerance_for_BZ_reduction(SPGCONST double rec_lattice[3][3],
 					     const int mesh[3]);
-static int get_grid_point_double_mesh(const int address_double[3],
-				      const int mesh[3]);
-static int get_grid_point_single_mesh(const int address[3],
-				      const int mesh[3]);
-static void reduce_grid_address(int address[3],
-				const int address_double[3],
-				const int mesh[3]);
-
-int kpt_get_grid_point_double_mesh(const int address_double[3],
-				   const int mesh[3])
-{
-  return get_grid_point_double_mesh(address_double, mesh);
-}
+static int check_mesh_symmetry(const int mesh[3],
+                               const MatINT *rot_reciprocal);
 
 /* grid_address (e.g. 4x4x4 mesh, unless GRID_ORDER_XYZ is defined) */
 /*    [[ 0  0  0]                                                   */
@@ -193,20 +228,11 @@ int kpt_get_irreducible_reciprocal_mesh(int grid_address[][3],
 {
   int num_ir;
 
-#ifdef _OPENMP
-  num_ir = get_ir_reciprocal_mesh_openmp(grid_address,
-					 map,
-					 mesh,
-					 is_shift,
-					 rot_reciprocal);
-  
-#else
   num_ir = get_ir_reciprocal_mesh(grid_address,
-				  map,
-				  mesh,
-				  is_shift,
-				  rot_reciprocal);
-#endif
+                                  map,
+                                  mesh,
+                                  is_shift,
+                                  rot_reciprocal);
   
   return num_ir;
 }
@@ -223,6 +249,9 @@ int kpt_get_stabilized_reciprocal_mesh(int grid_address[][3],
   int num_ir;
   MatINT *rot_reciprocal, *rot_reciprocal_q;
   double tolerance;
+
+  rot_reciprocal = NULL;
+  rot_reciprocal_q = NULL;
   
   rot_reciprocal = get_point_group_reciprocal(rotations, is_time_reversal);
   tolerance = 0.01 / (mesh[0] + mesh[1] + mesh[2]);
@@ -231,21 +260,16 @@ int kpt_get_stabilized_reciprocal_mesh(int grid_address[][3],
 						       num_q,
 						       qpoints);
 
-#ifdef _OPENMP
-  num_ir = get_ir_reciprocal_mesh_openmp(grid_address,
-					 map,
-					 mesh,
-					 is_shift,
-					 rot_reciprocal_q);
-#else
   num_ir = get_ir_reciprocal_mesh(grid_address,
 				  map,
 				  mesh,
 				  is_shift,
 				  rot_reciprocal_q);
-#endif
+
   mat_free_MatINT(rot_reciprocal_q);
+  rot_reciprocal_q = NULL;
   mat_free_MatINT(rot_reciprocal);
+  rot_reciprocal = NULL;
   return num_ir;
 }
 
@@ -265,7 +289,7 @@ void kpt_get_grid_points_by_rotations(int rot_grid_points[],
     mat_multiply_matrix_vector_i3(address_double,
 				  rot_reciprocal->mat[i],
 				  address_double_orig);
-    rot_grid_points[i] = get_grid_point_double_mesh(address_double, mesh);
+    rot_grid_points[i] = kgd_get_grid_point_double_mesh(address_double, mesh);
   }
 }
 
@@ -288,7 +312,7 @@ void kpt_get_BZ_grid_points_by_rotations(int rot_grid_points[],
 				  rot_reciprocal->mat[i],
 				  address_double_orig);
     rot_grid_points[i] =
-      bz_map[get_grid_point_double_mesh(address_double, bzmesh)];
+      bz_map[kgd_get_grid_point_double_mesh(address_double, bzmesh)];
   }
 }
 
@@ -325,6 +349,7 @@ MatINT *kpt_get_point_group_reciprocal_with_q(const MatINT * rot_reciprocal,
 					   qpoints);
 }
 
+/* Return NULL if failed */
 static MatINT *get_point_group_reciprocal(const MatINT * rotations,
 					  const int is_time_reversal)
 {
@@ -336,13 +361,28 @@ static MatINT *get_point_group_reciprocal(const MatINT * rotations,
     { 0,-1, 0 },
     { 0, 0,-1 }
   };
+
+  rot_reciprocal = NULL;
+  rot_return = NULL;
+  unique_rot = NULL;
   
   if (is_time_reversal) {
-    rot_reciprocal = mat_alloc_MatINT(rotations->size * 2);
+    if ((rot_reciprocal = mat_alloc_MatINT(rotations->size * 2)) == NULL) {
+      return NULL;
+    }
   } else {
-    rot_reciprocal = mat_alloc_MatINT(rotations->size);
+    if ((rot_reciprocal = mat_alloc_MatINT(rotations->size)) == NULL) {
+      return NULL;
+    }
   }
-  unique_rot = (int*)malloc(sizeof(int) * rot_reciprocal->size);
+
+  if ((unique_rot = (int*)malloc(sizeof(int) * rot_reciprocal->size)) == NULL) {
+    warning_print("spglib: Memory of unique_rot could not be allocated.");
+    mat_free_MatINT(rot_reciprocal);
+    rot_reciprocal = NULL;
+    return NULL;
+  }
+
   for (i = 0; i < rot_reciprocal->size; i++) {
     unique_rot[i] = -1;
   }
@@ -371,15 +411,21 @@ static MatINT *get_point_group_reciprocal(const MatINT * rotations,
     ;
   }
 
-  rot_return = mat_alloc_MatINT(num_rot);
-  for (i = 0; i < num_rot; i++) {
-    mat_copy_matrix_i3(rot_return->mat[i], rot_reciprocal->mat[unique_rot[i]]);    }
+  if ((rot_return = mat_alloc_MatINT(num_rot)) != NULL) {
+    for (i = 0; i < num_rot; i++) {
+      mat_copy_matrix_i3(rot_return->mat[i], rot_reciprocal->mat[unique_rot[i]]);
+    }
+  }
+
   free(unique_rot);
+  unique_rot = NULL;
   mat_free_MatINT(rot_reciprocal);
+  rot_reciprocal = NULL;
 
   return rot_return;
 }
 
+/* Return NULL if failed */
 static MatINT *get_point_group_reciprocal_with_q(const MatINT * rot_reciprocal,
 						 const double symprec,
 						 const int num_q,
@@ -390,9 +436,16 @@ static MatINT *get_point_group_reciprocal_with_q(const MatINT * rot_reciprocal,
   double q_rot[3], diff[3];
   MatINT * rot_reciprocal_q;
 
+  ir_rot = NULL;
+  rot_reciprocal_q = NULL;
   is_all_ok = 0;
   num_rot = 0;
-  ir_rot = (int*)malloc(sizeof(int) * rot_reciprocal->size);
+
+  if ((ir_rot = (int*)malloc(sizeof(int) * rot_reciprocal->size)) == NULL) {
+    warning_print("spglib: Memory of ir_rot could not be allocated.");
+    return NULL;
+  }
+
   for (i = 0; i < rot_reciprocal->size; i++) {
     ir_rot[i] = -1;
   }
@@ -428,144 +481,153 @@ static MatINT *get_point_group_reciprocal_with_q(const MatINT * rot_reciprocal,
     }
   }
 
-  rot_reciprocal_q = mat_alloc_MatINT(num_rot);
-  for (i = 0; i < num_rot; i++) {
-    mat_copy_matrix_i3(rot_reciprocal_q->mat[i],
-		       rot_reciprocal->mat[ir_rot[i]]);  
+  if ((rot_reciprocal_q = mat_alloc_MatINT(num_rot)) != NULL) {
+    for (i = 0; i < num_rot; i++) {
+      mat_copy_matrix_i3(rot_reciprocal_q->mat[i],
+			 rot_reciprocal->mat[ir_rot[i]]);  
+    }
   }
 
   free(ir_rot);
+  ir_rot = NULL;
 
   return rot_reciprocal_q;
 }
 
 static int get_ir_reciprocal_mesh(int grid_address[][3],
-				  int map[],
+				  int ir_mapping_table[],
 				  const int mesh[3],
 				  const int is_shift[3],
 				  const MatINT *rot_reciprocal)
+{
+  if (check_mesh_symmetry(mesh, rot_reciprocal)) {
+    return get_ir_reciprocal_mesh_normal(grid_address,
+                                         ir_mapping_table,
+                                         mesh,
+                                         is_shift,
+                                         rot_reciprocal);
+  } else {
+    return get_ir_reciprocal_mesh_distortion(grid_address,
+                                             ir_mapping_table,
+                                             mesh,
+                                             is_shift,
+                                             rot_reciprocal);
+  }
+}
+
+static int get_ir_reciprocal_mesh_normal(int grid_address[][3],
+                                         int ir_mapping_table[],
+                                         const int mesh[3],
+                                         const int is_shift[3],
+                                         const MatINT *rot_reciprocal)
 {
   /* In the following loop, mesh is doubled. */
   /* Even and odd mesh numbers correspond to */
   /* is_shift[i] are 0 or 1, respectively. */
   /* is_shift = [0,0,0] gives Gamma center mesh. */
   /* grid: reducible grid points */
-  /* map: the mapping from each point to ir-point. */
+  /* ir_mapping_table: the mapping from each point to ir-point. */
 
-  int i, j, k, l, grid_point, grid_point_rot, num_ir = 0;
-  int address[3], address_double[3], address_double_rot[3];
+  int i, j, grid_point_rot;
+  int address_double[3], address_double_rot[3];
 
-  /* "-1" means the element is not touched yet. */
+  kgd_get_all_grid_addresses(grid_address, mesh);
+
+#pragma omp parallel for private(j, grid_point_rot, address_double, address_double_rot)
   for (i = 0; i < mesh[0] * mesh[1] * mesh[2]; i++) {
-    map[i] = -1;
-  }
-
-#ifndef GRID_ORDER_XYZ
-  for (i = 0; i < mesh[2]; i++) {
-    for (j = 0; j < mesh[1]; j++) {
-      for (k = 0; k < mesh[0]; k++) {
-	address[0] = k;
-	address[1] = j;
-	address[2] = i;
+    kgd_get_grid_address_double_mesh(address_double,
+				     grid_address[i],
+				     mesh,
+				     is_shift);
+    ir_mapping_table[i] = i;
+    for (j = 0; j < rot_reciprocal->size; j++) {
+      mat_multiply_matrix_vector_i3(address_double_rot,
+				    rot_reciprocal->mat[j],
+				    address_double);
+      grid_point_rot = kgd_get_grid_point_double_mesh(address_double_rot, mesh);
+      if (grid_point_rot < ir_mapping_table[i]) {
+#ifdef _OPENMP
+	ir_mapping_table[i] = grid_point_rot;
 #else
-  for (i = 0; i < mesh[0]; i++) {
-    for (j = 0; j < mesh[1]; j++) {
-      for (k = 0; k < mesh[2]; k++) {
-	address[0] = i;
-	address[1] = j;
-	address[2] = k;
-#endif	
-	for (l = 0; l < 3; l++) {
-	  address_double[l] = address[l] * 2 + is_shift[l];
-	}
-	grid_point = get_grid_point_double_mesh(address_double, mesh);
-	reduce_grid_address(grid_address[grid_point], address, mesh);
-
-	for (l = 0; l < rot_reciprocal->size; l++) {
-	  mat_multiply_matrix_vector_i3(address_double_rot,
-					rot_reciprocal->mat[l],
-					address_double);
-	  grid_point_rot = get_grid_point_double_mesh(address_double_rot, mesh);
-
-	  if (grid_point_rot > -1) { /* Invalid if even --> odd or odd --> even */
-	    if (map[grid_point_rot] > -1) {
-	      map[grid_point] = map[grid_point_rot];
-	      break;
-	    }
-	  }
-	}
-	
-	if (map[grid_point] == -1) {
-	  map[grid_point] = grid_point;
-	  num_ir++;
-	}
+	ir_mapping_table[i] = ir_mapping_table[grid_point_rot];
+	break;
+#endif
       }
     }
   }
 
-  return num_ir;
+  return get_num_ir(ir_mapping_table, mesh);
 }
 
-static int
-get_ir_reciprocal_mesh_openmp(int grid_address[][3],
-			      int map[],
-			      const int mesh[3],
-			      const int is_shift[3],
-			      const MatINT * rot_reciprocal)
+static int get_ir_reciprocal_mesh_distortion(int grid_address[][3],
+                                             int ir_mapping_table[],
+                                             const int mesh[3],
+                                             const int is_shift[3],
+                                             const MatINT *rot_reciprocal)
 {
-  int i, j, k, l, grid_point, grid_point_rot, num_ir;
-  int address[3], address_double[3], address_double_rot[3];
+  int i, j, k, grid_point_rot, indivisible;
+  int address_double[3], address_double_rot[3], divisor[3];
 
-#ifndef GRID_ORDER_XYZ
-#pragma omp parallel for private(j, k, l, grid_point, grid_point_rot, address_double, address_double_rot)
-  for (i = 0; i < mesh[2]; i++) {
-    for (j = 0; j < mesh[1]; j++) {
-      for (k = 0; k < mesh[0]; k++) {
-	address[0] = k;
-	address[1] = j;
-	address[2] = i;
+  kgd_get_all_grid_addresses(grid_address, mesh);
+
+  for (i = 0; i < 3; i++) {
+    divisor[i] = mesh[(i + 1) % 3] * mesh[(i + 2) % 3];
+  }
+
+#pragma omp parallel for private(j, k, grid_point_rot, address_double, address_double_rot)
+  for (i = 0; i < mesh[0] * mesh[1] * mesh[2]; i++) {
+    kgd_get_grid_address_double_mesh(address_double,
+				     grid_address[i],
+				     mesh,
+				     is_shift);
+    for (j = 0; j < 3; j++) {
+      address_double[j] *= divisor[j];
+    }
+    ir_mapping_table[i] = i;
+    for (j = 0; j < rot_reciprocal->size; j++) {
+      mat_multiply_matrix_vector_i3(address_double_rot,
+				    rot_reciprocal->mat[j],
+				    address_double);
+      for (k = 0; k < 3; k++) {
+        indivisible = address_double_rot[k] % divisor[k];
+        if (indivisible) {break;}
+        address_double_rot[k] /= divisor[k];
+      }
+      if (indivisible) {continue;}
+      grid_point_rot = kgd_get_grid_point_double_mesh(address_double_rot, mesh);
+      if (grid_point_rot < ir_mapping_table[i]) {
+#ifdef _OPENMP
+	ir_mapping_table[i] = grid_point_rot;
 #else
-#pragma omp parallel for private(j, k, l, grid_point, grid_point_rot, address_double, address_double_rot)
-  for (i = 0; i < mesh[0]; i++) {
-    for (j = 0; j < mesh[1]; j++) {
-      for (k = 0; k < mesh[2]; k++) {
-	address[0] = i;
-	address[1] = j;
-	address[2] = k;
-#endif	
-	for (l = 0; l < 3; l++) {
-	  address_double[l] = address[l] * 2 + is_shift[l];
-	}
-
-	grid_point = get_grid_point_double_mesh(address_double, mesh);
-	map[grid_point] = grid_point;
-	reduce_grid_address(grid_address[grid_point], address, mesh);
-
-	for (l = 0; l < rot_reciprocal->size; l++) {
-	  mat_multiply_matrix_vector_i3(address_double_rot,
-					rot_reciprocal->mat[l],
-					address_double);
-	  grid_point_rot = get_grid_point_double_mesh(address_double_rot, mesh);
-
-	  if (grid_point_rot > -1) { /* Invalid if even --> odd or odd --> even */
-	    if (grid_point_rot < map[grid_point]) {
-	      map[grid_point] = grid_point_rot;
-	    }
-	  }
-	}
+	ir_mapping_table[i] = ir_mapping_table[grid_point_rot];
+	break;
+#endif
       }
     }
   }
+
+  return get_num_ir(ir_mapping_table, mesh);
+}
+
+static int get_num_ir(int ir_mapping_table[], const int mesh[3])
+{
+  int i, num_ir;
 
   num_ir = 0;
 
 #pragma omp parallel for reduction(+:num_ir)
   for (i = 0; i < mesh[0] * mesh[1] * mesh[2]; i++) {
-    if (map[i] == i) {
+    if (ir_mapping_table[i] == i) {
       num_ir++;
     }
   }
-  
+
+#ifdef _OPENMP
+  for (i = 0; i < mesh[0] * mesh[1] * mesh[2]; i++) {
+    ir_mapping_table[i] = ir_mapping_table[ir_mapping_table[i]];
+  }
+#endif
+
   return num_ir;
 }
 
@@ -594,11 +656,14 @@ static int relocate_BZ_grid_address(int bz_grid_address[][3],
   
   boundary_num_gp = 0;
   total_num_gp = mesh[0] * mesh[1] * mesh[2];
+
+  /* Multithreading doesn't work for this loop since gp calculated */
+  /* with boundary_num_gp is unstable to store bz_grid_address. */
   for (i = 0; i < total_num_gp; i++) {
     for (j = 0; j < KPT_NUM_BZ_SEARCH_SPACE; j++) {
       for (k = 0; k < 3; k++) {
 	q_vector[k] = 
-	  ((grid_address[i][k] + kpt_bz_search_space[j][k] * mesh[k]) * 2 +
+	  ((grid_address[i][k] + bz_search_space[j][k] * mesh[k]) * 2 +
 	   is_shift[k]) / ((double)mesh[k]) / 2;
       }
       mat_multiply_matrix_vector_d3(q_vector, rec_lattice, q_vector);
@@ -623,10 +688,10 @@ static int relocate_BZ_grid_address(int bz_grid_address[][3],
 	
 	for (k = 0; k < 3; k++) {
 	  bz_grid_address[gp][k] = 
-	    grid_address[i][k] + kpt_bz_search_space[j][k] * mesh[k];
+	    grid_address[i][k] + bz_search_space[j][k] * mesh[k];
 	  bz_address_double[k] = bz_grid_address[gp][k] * 2 + is_shift[k];
 	}
-	bzgp = get_grid_point_double_mesh(bz_address_double, bzmesh);
+	bzgp = kgd_get_grid_point_double_mesh(bz_address_double, bzmesh);
 	bz_map[bzgp] = gp;
 	if (j != min_index) {
 	  boundary_num_gp++;
@@ -662,44 +727,30 @@ static double get_tolerance_for_BZ_reduction(SPGCONST double rec_lattice[3][3],
   
   return tolerance;
 }
- 
-static int get_grid_point_double_mesh(const int address_double[3],
-				      const int mesh[3])
-{
-  int i, address[3];
 
-  for (i = 0; i < 3; i++) {
-    if (address_double[i] % 2 == 0) {
-      address[i] = address_double[i] / 2;
-    } else {
-      address[i] = (address_double[i] - 1) / 2;
-    }
-  }
-  mat_modulo_i3(address, mesh);
-  return get_grid_point_single_mesh(address, mesh);
-}
-
-static int get_grid_point_single_mesh(const int address[3],
-				      const int mesh[3])
-{  
-#ifndef GRID_ORDER_XYZ
-  return address[2] * mesh[0] * mesh[1] + address[1] * mesh[0] + address[0];
-#else
-  return address[0] * mesh[1] * mesh[2] + address[1] * mesh[2] + address[2];
-#endif  
-}
-
-static void reduce_grid_address(int reduced_address[3],
-				const int address[3],
-				const int mesh[3])
+static int check_mesh_symmetry(const int mesh[3],
+                               const MatINT *rot_reciprocal)
 {
   int i;
+  int eq[3];
 
-  for (i = 0; i < 3; i++) {
-#ifndef GRID_BOUNDARY_AS_NEGATIVE
-    reduced_address[i] = address[i] - mesh[i] * (address[i] > mesh[i] / 2);
-#else
-    reduced_address[i] = address[i] - mesh[i] * (address[i] >= mesh[i] / 2);
-#endif
-  }  
+  eq[0] = 0; /* a=b */
+  eq[1] = 0; /* b=c */
+  eq[2] = 0; /* c=a */
+
+  for (i = 0; i < rot_reciprocal->size; i++) {
+    if (rot_reciprocal->mat[i][0][0] == 0 &&
+        rot_reciprocal->mat[i][1][0] == 1 &&
+        rot_reciprocal->mat[i][2][0] == 0) {eq[0] = 1;}
+    if (rot_reciprocal->mat[i][0][0] == 0 &&
+        rot_reciprocal->mat[i][1][0] == 0 &&
+        rot_reciprocal->mat[i][2][0] == 1) {eq[2] = 1;}
+    if (rot_reciprocal->mat[i][0][1] == 0 &&
+        rot_reciprocal->mat[i][1][1] == 0 &&
+        rot_reciprocal->mat[i][2][1] == 1) {eq[1] = 1;}
+  }
+
+  return (((eq[0] && mesh[0] == mesh[1]) || (!eq[0])) &&
+          ((eq[1] && mesh[1] == mesh[2]) || (!eq[1])) &&
+          ((eq[2] && mesh[2] == mesh[0]) || (!eq[2])));
 }
