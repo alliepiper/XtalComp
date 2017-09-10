@@ -1708,27 +1708,17 @@ unsigned int XtalComp::reduceToPrimitive(std::vector<XcVector>& fcoords,
                                   numAtoms,
                                   cartTol);
 
-  // Refine the structure
-  int numBravaisAtoms =
-    spg_refine_cell(lattice, positions, types,
-                    numAtoms, cartTol);
-
-  // if spglib cannot refine the cell, return 0.
-  if (numBravaisAtoms <= 0) {
-    return 0;
-  }
-
-  // Find primitive cell. This updates lattice, positions, types
+  // Find primitive cell. This updates lattice, positions, and types
   // to primitive
-  int numPrimitiveAtoms =
-    spg_find_primitive(lattice, positions, types,
-                       numBravaisAtoms, cartTol);
 
-  // If the cell was already a primitive cell, reset
-  // numPrimitiveAtoms.
-  if (numPrimitiveAtoms == 0) {
-    numPrimitiveAtoms = numBravaisAtoms;
-  }
+  // Should we convert this cell to its primitive form? Yes == 1
+  int to_primitive = 1;
+
+  // Should we idealize the unit cell? Yes == 0
+  int no_idealize = 0;
+  int numPrimitiveAtoms = spg_standardize_cell(lattice, positions, types,
+                                               numAtoms, to_primitive,
+                                               no_idealize, cartTol);
 
   // Bail if everything failed
   if (numPrimitiveAtoms <= 0) {
