@@ -1,5 +1,5 @@
 /**********************************************************************
-  XtalComp - Determine if two crystal description represent the same
+  XtalComp - Determine if two crystal descriptions represent the same
   structure
 
   Copyright (C) 2011 by David C. Lonie
@@ -33,6 +33,7 @@ typedef XtalComp::DuplicateMap DuplicateMap;
 
 #define RAD_TO_DEG 57.2957795131
 #define DEG_TO_RAD 0.0174532925199
+#define PRECISION 1e-10
 
 #undef XTALCOMP_DEBUG
 //#define XTALCOMP_DEBUG 1
@@ -64,6 +65,7 @@ typedef XtalComp::DuplicateMap DuplicateMap;
                                 (m)(2,0), (m)(2,1), (m)(2,2), (m)(2,3), \
                                 (m)(3,0), (m)(3,1), (m)(3,2), (m)(3,3))
 #define DEBUG_STRING(str) printf("%s\n", str)
+#define DEBUG_STRING_INT(str, i) printf("%s %d\n", str, i)
 #endif
 
 // vecs += trans
@@ -107,7 +109,7 @@ static inline double compAngle(const XcVector &v1,
   if (angle <= 90.0)
     return angle;
   else
-    return angle - ( (angle - 90.0)+(angle - 90.0) );
+    return 180.0 - angle;
 }
 
 class XtalComp::ReducedXtal
@@ -284,7 +286,7 @@ bool XtalComp::compare(const XcMatrix &_cellMatrix1,
     return false;
   }
 
-  // Check params here. Do not just compare the matrices, this may
+  // Check params here. Do not just compare the matrices, as this may
   // not catch certain enantiomorphs:
   // Compare volumes. Tolerance is 1% of this->getVolume()
   const double vol1 = fabs(cellMatrix1.determinant());
@@ -449,7 +451,7 @@ void XtalComp::prepareRx1()
 
   XcVector rx1_ftrans = - (m_rx1->fcoords()[refTransIndex]);
 
-  // Translate rx1 by the above vector. This places a lfAtom at the origin.
+  // Translate rx1 by the above vector. This places an lfAtom at the origin.
   m_rx1->translateAndExpandCoords(rx1_ftrans, m_lengthtol, &m_duplicatedAtoms);
 }
 
@@ -515,6 +517,11 @@ void XtalComp::buildSuperLfCCoordList2()
         fabs(compAngle(v1, v3) - 60.0) < m_angletol) ||
        (fabs(v2SqNorm - v3SqNorm) < normTol &&
         fabs(compAngle(v2, v3) - 60.0) < m_angletol));
+
+#ifdef XTALCOMP_DEBUG
+  if (cellIsHexagonal)
+    DEBUG_STRING("Cell is hexagonal");
+#endif
 
   // 3x3x3 case:
   if (diagonalSameLengthAsVector || cellIsHexagonal) {
@@ -981,7 +988,8 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
   //
   // Plane 4:
   //  n = v1; r0 = p8
-  //  Plane equ: v1 ( r - p8 ) = 0 = v1[0] * r[0] - v1[1] * r0[0]
+  //  Plane equ: v1 ( r - p8 ) = 0 = v1[0] * r[0] - v1[1] * r0[0] or
+  //  Plane equ: v1 ( r - p8 ) = 0 = v1[0] * r[0] - v1[0] * r0[0] ??
   //             r[0] - 1 = 0
   //
   // Plane 5:
@@ -1044,7 +1052,7 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
   // delta_c, the cartesian distance is simply the norm of delta_c.
   //
   // Calculate the cartesian distance from each plane to each atom
-  // and if there it is below the tolerance, add an new atom
+  // and if it is below the tolerance, add a new atom
   // translated by the normal vector of the plane to the opposite
   // side of the cell.
 
@@ -1074,13 +1082,13 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
     const unsigned int curType = (*types)[i];
 
     // Wrap:
-    if ((curVecMut[0] = fmod(curVecMut[0], 1.0)) < 0) ++curVecMut[0];
-    if ((curVecMut[1] = fmod(curVecMut[1], 1.0)) < 0) ++curVecMut[1];
-    if ((curVecMut[2] = fmod(curVecMut[2], 1.0)) < 0) ++curVecMut[2];
+    if ((curVecMut[0] = fmod(curVecMut[0], 1.0)) < -1.0*PRECISION) ++curVecMut[0];
+    if ((curVecMut[1] = fmod(curVecMut[1], 1.0)) < -1.0*PRECISION) ++curVecMut[1];
+    if ((curVecMut[2] = fmod(curVecMut[2], 1.0)) < -1.0*PRECISION) ++curVecMut[2];
 
     // This is necessary to prevent bizarre behavior when expanding
     // the cell (Possibly an aliasing bug in Eigen?) (We no longer
-    // use Eigen, but lets keep this as-is just in case I
+    // use Eigen, but let's keep this as-is just in case I
     // misdiagnosed the problem as Eigen-specific)
     const XcVector curVec =
       const_cast<const XcVector &>(curVecMut);
@@ -1565,7 +1573,7 @@ bool XtalComp::compareCurrent()
     rx2AtomMatched = false;
 
 #ifdef XTALCOMP_DEBUG
-    DEBUG_STRING("Rx2 atom:");
+    DEBUG_STRING_INT("Rx2 atom:", rx2Ind);
     DEBUG_ATOM(rx2_type, rx2_ccoord);
 #endif
 
@@ -1573,9 +1581,9 @@ bool XtalComp::compareCurrent()
     rx2_xformedCoord = m_rx1->fmat() * rx2_ccoord;
 
     // Wrap to cell
-    if ((rx2_xformedCoord[0] = fmod(rx2_xformedCoord[0], 1.0)) < 0) ++rx2_xformedCoord[0];
-    if ((rx2_xformedCoord[1] = fmod(rx2_xformedCoord[1], 1.0)) < 0) ++rx2_xformedCoord[1];
-    if ((rx2_xformedCoord[2] = fmod(rx2_xformedCoord[2], 1.0)) < 0) ++rx2_xformedCoord[2];
+    if ((rx2_xformedCoord[0] = fmod(rx2_xformedCoord[0], 1.0)) < -1.0*PRECISION) ++rx2_xformedCoord[0];
+    if ((rx2_xformedCoord[1] = fmod(rx2_xformedCoord[1], 1.0)) < -1.0*PRECISION) ++rx2_xformedCoord[1];
+    if ((rx2_xformedCoord[2] = fmod(rx2_xformedCoord[2], 1.0)) < -1.0*PRECISION) ++rx2_xformedCoord[2];
 
     // convert back to a cartesian coordinate
     rx2_xformedCoord = m_rx1->cmat() * rx2_xformedCoord;
@@ -1606,7 +1614,7 @@ bool XtalComp::compareCurrent()
       // If the coordinates don't match, move to the next rx2 atom
       const XcVector &rx1_ccoord = rx1_ccoords[rx1Ind];
 #ifdef XTALCOMP_DEBUG
-      DEBUG_STRING("Rx1 coords:");
+      DEBUG_STRING_INT("Rx1 coords:", rx1Ind);
       DEBUG_VECTOR(rx1_ccoord);
 #endif
       diffVec = rx2_xformedCoord - rx1_ccoord;
@@ -1632,7 +1640,7 @@ bool XtalComp::compareCurrent()
                     rx1AtomAlreadyMatched.begin() + it->second.second + 1,
                     true);
 #ifdef XTALCOMP_DEBUG
-          std::cout << "rx1AtomAlreadyMatched at rx1 indicies " << it->first
+          std::cout << "rx1AtomAlreadyMatched at rx1 indices " << it->first
                     << " and " << it->second.first << "-" << it->second.second
                     << " = true now\n";
 #endif
@@ -1651,15 +1659,16 @@ bool XtalComp::compareCurrent()
 
     // otherwise move to next rx1Atom:
 #ifdef XTALCOMP_DEBUG
-    DEBUG_STRING("Atom matched!");
+    printf("Atom %d/%d matched!\n", rx2Ind+1, rx2_types.size());
     DEBUG_DIV;
 #endif
     continue;
   }
 
-  // If we make it here, all of the atoms had a match. Return success.
+  // If we make it to here, all atoms had a match. Return success.
 #ifdef XTALCOMP_DEBUG
-  DEBUG_STRING("Structure matched!");
+  // DEBUG_STRING("Structure matched!");
+  printf("Structure matched! (transform %d of %d)\n", m_transformsIndex, m_transforms.size());
   DEBUG_DIV;
 #endif
   return true;
@@ -2062,9 +2071,9 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
     ccoord = rot * ccoord;
     fcoord = newFracMat * ccoord;
     // wrap fcoord
-    if ((fcoord(0) = fmod(fcoord(0), 1.0)) < 0) ++fcoord(0);
-    if ((fcoord(1) = fmod(fcoord(1), 1.0)) < 0) ++fcoord(1);
-    if ((fcoord(2) = fmod(fcoord(2), 1.0)) < 0) ++fcoord(2);
+    if ((fcoord(0) = fmod(fcoord(0), 1.0)) < -1.0*PRECISION) ++fcoord(0);
+    if ((fcoord(1) = fmod(fcoord(1), 1.0)) < -1.0*PRECISION) ++fcoord(1);
+    if ((fcoord(2) = fmod(fcoord(2), 1.0)) < -1.0*PRECISION) ++fcoord(2);
   }
 
   return true;
@@ -2152,8 +2161,8 @@ bool XtalComp::ReducedXtal::isNiggliReduced() const
   // comparison tolerance
   double tol = STABLE_COMP_TOL * ( this->volume() * (1.0 / 3.0) );
 
-  // First check the Buerger conditions. Taken from: Gruber B.. Acta
-  // Cryst. A. 1973;29(4):433-440. Available at:
+  // First check the Buerger conditions. Taken from: Gruber B. Acta
+  // Cryst. A. 1973;29(4):433-440. Available at
   // http://scripts.iucr.org/cgi-bin/paper?S0567739473001063
   // [Accessed December 15, 2010].
   if (StableComp::gt(A, B, tol) || StableComp::gt(B, C, tol)) return false;
