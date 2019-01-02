@@ -33,7 +33,7 @@ typedef XtalComp::DuplicateMap DuplicateMap;
 
 #define RAD_TO_DEG 57.2957795131
 #define DEG_TO_RAD 0.0174532925199
-#define PRECISION 1e-10
+#define PRECISION 1e-8
 
 #undef XTALCOMP_DEBUG
 //#define XTALCOMP_DEBUG 1
@@ -1082,9 +1082,9 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
     const unsigned int curType = (*types)[i];
 
     // Wrap:
-    if ((curVecMut[0] = fmod(curVecMut[0], 1.0)) < -1.0*PRECISION) ++curVecMut[0];
-    if ((curVecMut[1] = fmod(curVecMut[1], 1.0)) < -1.0*PRECISION) ++curVecMut[1];
-    if ((curVecMut[2] = fmod(curVecMut[2], 1.0)) < -1.0*PRECISION) ++curVecMut[2];
+    if (StableComp::lt((curVecMut[0] = fmod(curVecMut[0], 1.0)), 0.0, PRECISION)) ++curVecMut[0];
+    if (StableComp::lt((curVecMut[1] = fmod(curVecMut[1], 1.0)), 0.0, PRECISION)) ++curVecMut[1];
+    if (StableComp::lt((curVecMut[2] = fmod(curVecMut[2], 1.0)), 0.0, PRECISION)) ++curVecMut[2];
 
     // This is necessary to prevent bizarre behavior when expanding
     // the cell (Possibly an aliasing bug in Eigen?) (We no longer
@@ -1406,9 +1406,9 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
     if (nearPlane1 && nearPlane5) {
       fcoords->push_back(curVec + v1);
       types->push_back(curType);
-      fcoords->push_back(curVec - v3);
+      fcoords->push_back(curVec - v2);
       types->push_back(curType);
-      fcoords->push_back(curVec + v1 - v3);
+      fcoords->push_back(curVec + v1 - v2);
       types->push_back(curType);
       duplicateAtoms->insert(
             std::make_pair(i, std::make_pair(startIdx, fcoords->size() - 1)));
@@ -1418,9 +1418,9 @@ void XtalComp::expandFractionalCoordinates(std::vector<unsigned int> *types,
     if (nearPlane1 && nearPlane6) {
       fcoords->push_back(curVec + v1);
       types->push_back(curType);
-      fcoords->push_back(curVec - v2);
+      fcoords->push_back(curVec - v3);
       types->push_back(curType);
-      fcoords->push_back(curVec + v1 - v2);
+      fcoords->push_back(curVec + v1 - v3);
       types->push_back(curType);
       duplicateAtoms->insert(
             std::make_pair(i, std::make_pair(startIdx, fcoords->size() - 1)));
@@ -1581,9 +1581,9 @@ bool XtalComp::compareCurrent()
     rx2_xformedCoord = m_rx1->fmat() * rx2_ccoord;
 
     // Wrap to cell
-    if ((rx2_xformedCoord[0] = fmod(rx2_xformedCoord[0], 1.0)) < -1.0*PRECISION) ++rx2_xformedCoord[0];
-    if ((rx2_xformedCoord[1] = fmod(rx2_xformedCoord[1], 1.0)) < -1.0*PRECISION) ++rx2_xformedCoord[1];
-    if ((rx2_xformedCoord[2] = fmod(rx2_xformedCoord[2], 1.0)) < -1.0*PRECISION) ++rx2_xformedCoord[2];
+    if (StableComp::lt((rx2_xformedCoord[0] = fmod(rx2_xformedCoord[0], 1.0)), 0.0, PRECISION)) ++rx2_xformedCoord[0];
+    if (StableComp::lt((rx2_xformedCoord[1] = fmod(rx2_xformedCoord[1], 1.0)), 0.0, PRECISION)) ++rx2_xformedCoord[1];
+    if (StableComp::lt((rx2_xformedCoord[2] = fmod(rx2_xformedCoord[2], 1.0)), 0.0, PRECISION)) ++rx2_xformedCoord[2];
 
     // convert back to a cartesian coordinate
     rx2_xformedCoord = m_rx1->cmat() * rx2_xformedCoord;
@@ -2071,9 +2071,9 @@ bool XtalComp::ReducedXtal::canonicalizeLattice()
     ccoord = rot * ccoord;
     fcoord = newFracMat * ccoord;
     // wrap fcoord
-    if ((fcoord(0) = fmod(fcoord(0), 1.0)) < -1.0*PRECISION) ++fcoord(0);
-    if ((fcoord(1) = fmod(fcoord(1), 1.0)) < -1.0*PRECISION) ++fcoord(1);
-    if ((fcoord(2) = fmod(fcoord(2), 1.0)) < -1.0*PRECISION) ++fcoord(2);
+    if (StableComp::lt((fcoord[0] = fmod(fcoord(0), 1.0)), 0.0, PRECISION)) ++fcoord(0);
+    if (StableComp::lt((fcoord[1] = fmod(fcoord(1), 1.0)), 0.0, PRECISION)) ++fcoord(1);
+    if (StableComp::lt((fcoord[2] = fmod(fcoord(2), 1.0)), 0.0, PRECISION)) ++fcoord(2);
   }
 
   return true;
