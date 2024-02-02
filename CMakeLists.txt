@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.14) # Recommend a newer version for FetchContent
 project (XtalComp)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -9,10 +9,18 @@ add_library (XtalCompShared SHARED xtalcomp.cpp xctransform.cpp xcvector.h xcmat
 stablecomparison.h)
 set_target_properties(XtalCompShared PROPERTIES OUTPUT_NAME XtalComp)
 
-target_link_libraries(XtalComp spglib)
-target_link_libraries(XtalCompShared spglib)
+include(FetchContent)
+FetchContent_Declare(Spglib
+    GIT_REPOSITORY https://github.com/spglib/spglib
+    GIT_TAG v2.3.0
+)
+FetchContent_MakeAvailable(Spglib)
 
-add_subdirectory(spglib)
+target_include_directories(XtalComp PRIVATE ${spglib_SOURCE_DIR}/src)
+target_include_directories(XtalCompShared PRIVATE ${spglib_SOURCE_DIR}/src)
+
+target_link_libraries(XtalComp PRIVATE Spglib::symspg)
+target_link_libraries(XtalCompShared PRIVATE Spglib::symspg)
 
 option( BUILD_CGI
        "Whether to compile the CGI handler as well as the XtalComp code."

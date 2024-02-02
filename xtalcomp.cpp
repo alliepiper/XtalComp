@@ -18,7 +18,7 @@
 #include "stablecomparison.h"
 
 extern "C" {
-#include "spglib/spglib.h"
+#include "spglib.h"
 }
 
 #include <algorithm>
