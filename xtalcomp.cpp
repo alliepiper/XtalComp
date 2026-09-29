@@ -2172,8 +2172,8 @@ bool XtalComp::ReducedXtal::isNiggliReduced() const
          StableComp::gt(eta, 0.0, tol) &&
          StableComp::gt(zeta, 0.0, tol))
        &&
-       !(StableComp::leq(zeta, 0.0, tol) &&
-         StableComp::leq(zeta, 0.0, tol) &&
+       !(StableComp::leq(xi, 0.0, tol) &&
+         StableComp::leq(eta, 0.0, tol) &&
          StableComp::leq(zeta, 0.0, tol)) ) return false;
 
   // Check against Niggli conditions (taken from Gruber 1973). The
