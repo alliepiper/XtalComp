@@ -64,6 +64,10 @@ class XtalComp
    *
    * @return True if structures match, false otherwise
    */
+
+  // Internal type: See m_duplicatedAtoms for description.
+  using DuplicateMap = std::map<std::size_t, std::pair<std::size_t, std::size_t>>;
+
   static bool compare(const XcMatrix &cellMatrix1,
                       const std::vector<unsigned int> &types1,
                       const std::vector<XcVector> &positions1,
@@ -77,8 +81,11 @@ class XtalComp
 
   virtual ~XtalComp();
 
-  // Internal type: See m_duplicatedAtoms for description.
-  typedef std::map<size_t, std::pair<size_t, size_t> > DuplicateMap;
+// Rule of Five: prevent unintentional shallow copies with raw/unique ownership
+  XtalComp(const XtalComp&) = delete;
+  XtalComp& operator=(const XtalComp&) = delete;
+  XtalComp(XtalComp&&) noexcept = default;
+  XtalComp& operator=(XtalComp&&) noexcept = default;
 
  protected:
   class ReducedXtal;
@@ -108,11 +115,11 @@ class XtalComp
   static unsigned int reduceToPrimitive(std::vector<XcVector>& fcoords,
                                         std::vector<unsigned int>& atomicNums,
                                         XcMatrix& cellMatrix,
-                                        const double cartTol);
+                                        double cartTol);
 
   // Tolerance
-  double m_lengthtol;
-  double m_angletol;
+  double m_lengthtol{0.0};
+  double m_angletol{0.0};
 
   // Reduced xtals
   ReducedXtal *m_rx1;
@@ -140,8 +147,8 @@ class XtalComp
 
   // Add atoms around cell boundaries for stability during comparisons
   static void expandFractionalCoordinates(
-          std::vector<unsigned int> *types, std::vector<XcVector> *fcoords,
-          DuplicateMap *duplicateAtoms, const XcMatrix &cmat, const double tol);
+          std::vector<unsigned int>& types, std::vector<XcVector>& fcoords,
+          DuplicateMap& duplicateAtoms, const XcMatrix &cmat, double tol);
 
   // Reference vectors:
   XcVector m_refVec1;
@@ -150,7 +157,7 @@ class XtalComp
 
   std::vector<XcTransform> m_transforms;
   XcTransform m_transform;
-  unsigned int m_transformsIndex;
+  unsigned int m_transformsIndex{0};
 
   void buildTransformedXtal2();
   XcMatrix m_transformedCMat;
