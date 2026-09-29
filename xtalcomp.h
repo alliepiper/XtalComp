@@ -100,8 +100,8 @@ class XtalComp
   void getCurrentTransform(float[16]);
 
   // Are there more comparisons to make?
-  bool hasMoreTransforms() const;
-  bool hasMoreTranslations() const;
+  [[nodiscard]] bool hasMoreTransforms() const;
+  [[nodiscard]] bool hasMoreTranslations() const;
 
   // Update working coordinates
   void applyNextTransform();
