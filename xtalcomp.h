@@ -70,7 +70,7 @@ class XtalComp
                       const XcMatrix &cellMatrix2,
                       const std::vector<unsigned int> &types2,
                       const std::vector<XcVector> &positions2,
-                      float transform[16] = 0,
+                      float transform[16] = {0},
                       const double cartTol = 0.05,
                       const double angleTol = 0.25,
                       const bool reduceXtalToPrimitive = true);
