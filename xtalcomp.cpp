@@ -69,12 +69,11 @@ typedef XtalComp::DuplicateMap DuplicateMap;
 #endif
 
 // vecs += trans
-inline void translateVectorsInPlace(std::vector<XcVector> *vecs,
-                                    const XcVector &trans)
+inline void translateVectorsInPlace(std::vector<XcVector>& vecs,
+                                    const XcVector& trans)
 {
-  for (std::vector<XcVector>::iterator it = vecs->begin(),
-         it_end = vecs->end(); it != it_end; ++it) {
-    *it += trans;
+  for (auto& vec : vecs) {
+    vec += trans;
   }
 }
 
