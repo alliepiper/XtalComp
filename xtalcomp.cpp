@@ -2158,7 +2158,7 @@ bool XtalComp::ReducedXtal::isNiggliReduced() const
   double zeta = 2*this->v1().dot(this->v2());
 
   // comparison tolerance
-  double tol = STABLE_COMP_TOL * ( this->volume() * (1.0 / 3.0) );
+  double tol = STABLE_COMP_TOL * pow(fabs(this->volume()), 1.0 / 3.0);
 
   // First check the Buerger conditions. Taken from: Gruber B. Acta
   // Cryst. A. 1973;29(4):433-440. Available at
