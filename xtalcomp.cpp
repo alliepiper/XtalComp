@@ -69,12 +69,11 @@ typedef XtalComp::DuplicateMap DuplicateMap;
 #endif
 
 // vecs += trans
-inline void translateVectorsInPlace(std::vector<XcVector> *vecs,
-                                    const XcVector &trans)
+inline void translateVectorsInPlace(std::vector<XcVector>& vecs,
+                                    const XcVector& trans)
 {
-  for (std::vector<XcVector>::iterator it = vecs->begin(),
-         it_end = vecs->end(); it != it_end; ++it) {
-    *it += trans;
+  for (auto& vec : vecs) {
+    vec += trans;
   }
 }
 
@@ -2159,7 +2158,7 @@ bool XtalComp::ReducedXtal::isNiggliReduced() const
   double zeta = 2*this->v1().dot(this->v2());
 
   // comparison tolerance
-  double tol = STABLE_COMP_TOL * ( this->volume() * (1.0 / 3.0) );
+  double tol = STABLE_COMP_TOL * pow(fabs(this->volume()), 1.0 / 3.0);
 
   // First check the Buerger conditions. Taken from: Gruber B. Acta
   // Cryst. A. 1973;29(4):433-440. Available at
